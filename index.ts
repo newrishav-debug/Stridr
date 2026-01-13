@@ -1,3 +1,12 @@
+/**
+ * File: index.ts
+ * Purpose: Entry point for the Expo application.
+ * Created: 2024-01-12
+ * Author: AI Assistant
+ *
+ * Modification History:
+ * 2024-01-12: Documentation added.
+ */
 import { registerRootComponent } from 'expo';
 
 import App from './App';

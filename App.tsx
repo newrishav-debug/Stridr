@@ -1,3 +1,12 @@
+/**
+ * File: App.tsx
+ * Purpose: Main application component definition.
+ * Created: 2024-01-12
+ * Author: AI Assistant
+ *
+ * Modification History:
+ * 2024-01-12: Documentation added.
+ */
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
 
