@@ -149,7 +149,7 @@ function PrivacyPolicyContent({ theme }: { theme: any }) {
 
             <Section title="Contact Us" theme={theme}>
                 For questions about this Privacy Policy, please contact us at:{'\n\n'}
-                Email: support@stridrapp.com
+                Email: newrishav@gmail.com
             </Section>
         </View>
     );
@@ -218,7 +218,7 @@ function TermsOfServiceContent({ theme }: { theme: any }) {
 
             <Section title="Contact Information" theme={theme}>
                 For questions about these Terms:{'\n\n'}
-                Email: support@stridrapp.com
+                Email: newrishav@gmail.com
             </Section>
         </View>
     );

@@ -1,17 +1,17 @@
 /**
  * File: app/signup.tsx
- * Purpose: Signup screen for new user registration with email and social providers.
+ * Purpose: Signup screen for new user registration with email.
  * Created: 2024-01-12
  * Author: AI Assistant
  *
  * Modification History:
  * 2024-01-12: Documentation added.
- * 2024-01-12: Added Google and Facebook sign-in buttons.
  * 2026-01-12: Added scenic background image.
  * 2026-01-12: Extended registration form with firstName, lastName, confirmPassword.
+ * 2026-01-13: Removed social login buttons (Google/Facebook).
  */
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ActivityIndicator, ImageBackground, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ImageBackground, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useAuth } from '../src/context/AuthContext';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,9 +22,7 @@ export default function SignupScreen() {
     const [email, setEmail] = useState('');
     const [pass, setPass] = useState('');
     const [confirmPass, setConfirmPass] = useState('');
-    const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-    const [isFacebookLoading, setIsFacebookLoading] = useState(false);
-    const { register, loginWithGoogle, loginWithFacebook, googlePromptAsync, facebookPromptAsync } = useAuth();
+    const { register } = useAuth();
     const router = useRouter();
 
     const validateEmail = (email: string) => {
@@ -65,28 +63,6 @@ export default function SignupScreen() {
         }
     };
 
-    const handleGoogleSignup = async () => {
-        try {
-            setIsGoogleLoading(true);
-            await loginWithGoogle();
-        } catch (e: any) {
-            Alert.alert('Google Sign-Up Failed', e.message);
-        } finally {
-            setIsGoogleLoading(false);
-        }
-    };
-
-    const handleFacebookSignup = async () => {
-        try {
-            setIsFacebookLoading(true);
-            await loginWithFacebook();
-        } catch (e: any) {
-            Alert.alert('Facebook Sign-Up Failed', e.message);
-        } finally {
-            setIsFacebookLoading(false);
-        }
-    };
-
     return (
         <ImageBackground
             source={require('../assets/auth_background.png')}
@@ -111,46 +87,6 @@ export default function SignupScreen() {
                             <Text style={styles.subtitle}>Start your adventure today</Text>
 
                             <View style={styles.form}>
-                                {/* Social Sign-up Buttons First */}
-                                <View style={styles.socialButtons}>
-                                    <TouchableOpacity
-                                        style={[styles.socialButton, styles.googleButton]}
-                                        onPress={handleGoogleSignup}
-                                        disabled={isGoogleLoading || !googlePromptAsync}
-                                    >
-                                        {isGoogleLoading ? (
-                                            <ActivityIndicator color="#fff" size="small" />
-                                        ) : (
-                                            <>
-                                                <Text style={styles.googleIcon}>G</Text>
-                                                <Text style={styles.socialButtonText}>Sign up with Google</Text>
-                                            </>
-                                        )}
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        style={[styles.socialButton, styles.facebookButton]}
-                                        onPress={handleFacebookSignup}
-                                        disabled={isFacebookLoading || !facebookPromptAsync}
-                                    >
-                                        {isFacebookLoading ? (
-                                            <ActivityIndicator color="#fff" size="small" />
-                                        ) : (
-                                            <>
-                                                <Text style={styles.facebookIcon}>f</Text>
-                                                <Text style={styles.socialButtonText}>Sign up with Facebook</Text>
-                                            </>
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
-
-                                {/* Divider */}
-                                <View style={styles.divider}>
-                                    <View style={styles.dividerLine} />
-                                    <Text style={styles.dividerText}>or sign up with email</Text>
-                                    <View style={styles.dividerLine} />
-                                </View>
-
                                 {/* Name Row */}
                                 <View style={styles.nameRow}>
                                     <View style={styles.nameField}>
@@ -297,53 +233,6 @@ const styles = StyleSheet.create({
     signupButtonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
-    },
-    divider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 16,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: 'rgba(255,255,255,0.3)',
-    },
-    dividerText: {
-        marginHorizontal: 12,
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.7)',
-    },
-    socialButtons: {
-        gap: 12,
-    },
-    socialButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 14,
-        borderRadius: 12,
-        gap: 10,
-    },
-    googleButton: {
-        backgroundColor: '#EA4335',
-    },
-    facebookButton: {
-        backgroundColor: '#1877F2',
-    },
-    googleIcon: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    facebookIcon: {
-        color: '#fff',
-        fontSize: 20,
-        fontWeight: 'bold',
-    },
-    socialButtonText: {
-        color: '#fff',
-        fontSize: 15,
         fontWeight: '600',
     },
     linkInfo: {

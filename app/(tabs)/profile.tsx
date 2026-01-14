@@ -42,7 +42,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function ProfileScreen() {
     const router = useRouter();
     const { user, logout } = useAuth();
-    const { progress } = useGame();
+    const { progress, debug } = useGame();
     const {
         preferences,
         setDistanceUnit,
@@ -102,7 +102,22 @@ export default function ProfileScreen() {
             'Are you sure you want to delete your account? This action cannot be undone and all your data will be lost.',
             [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => router.replace('/login') }
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // Clear all game progress data (GDPR compliance)
+                            await debug?.resetProgress();
+                            // Log out and clear session
+                            await logout();
+                            // Navigate to login
+                            router.replace('/login');
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to delete account. Please try again.');
+                        }
+                    }
+                }
             ]
         );
     };
