@@ -1,15 +1,24 @@
 /**
  * File: src/context/AuthContext.tsx
- * Purpose: Manages user authentication state and session.
+ * Purpose: Manages user authentication state and session with Firebase.
  * Created: 2024-01-12
  * Author: AI Assistant
  *
  * Modification History:
  * 2024-01-12: Documentation added.
  * 2024-01-13: Removed Google and Facebook OAuth (to be added with development build later).
+ * 2026-01-14: Migrated to Firebase Authentication and Firestore.
  */
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    User as FirebaseUser
+} from 'firebase/auth';
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 
 interface User {
     id: string;
@@ -31,92 +40,111 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-const USERS_KEY = 'stridr_users_db';
-const SESSION_KEY = 'stridr_current_session';
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        checkSession();
+        // Listen to Firebase auth state changes
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+            if (firebaseUser) {
+                // User is signed in, fetch profile from Firestore
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        setUser({
+                            id: firebaseUser.uid,
+                            email: firebaseUser.email || '',
+                            name: userData.name || '',
+                            firstName: userData.firstName,
+                            lastName: userData.lastName,
+                            profileImage: userData.profileImage
+                        });
+                    } else {
+                        // User doc doesn't exist, sign out
+                        await signOut(auth);
+                        setUser(null);
+                    }
+                } catch (error) {
+                    console.error('Error fetching user data:', error);
+                    setUser(null);
+                }
+            } else {
+                // User is signed out
+                setUser(null);
+            }
+            setIsLoading(false);
+        });
+
+        return () => unsubscribe();
     }, []);
 
-    const checkSession = async () => {
-        try {
-            const session = await AsyncStorage.getItem(SESSION_KEY);
-            if (session) {
-                setUser(JSON.parse(session));
-            }
-        } catch (e) {
-            console.error('Session check failed', e);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     const login = async (email: string, pass: string) => {
-        // 1. Get all users
-        const json = await AsyncStorage.getItem(USERS_KEY);
-        const users = json ? JSON.parse(json) : [];
-
-        // 2. Find match
-        const match = users.find((u: any) => u.email === email && u.pass === pass);
-
-        if (match) {
-            const userObj = { id: match.id, name: match.name, email: match.email, profileImage: match.profileImage };
-            setUser(userObj);
-            await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userObj));
-        } else {
-            throw new Error('Invalid email or password');
+        try {
+            const userCredential = await signInWithEmailAndPassword(
+                auth,
+                email.toLowerCase(),
+                pass
+            );
+            // User state will be updated by onAuthStateChanged listener
+        } catch (error: any) {
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+                throw new Error('Invalid email or password');
+            }
+            throw error;
         }
     };
 
     const register = async (firstName: string, lastName: string, email: string, pass: string) => {
-        const json = await AsyncStorage.getItem(USERS_KEY);
-        const users = json ? JSON.parse(json) : [];
+        try {
+            // Create Firebase auth user
+            const userCredential = await createUserWithEmailAndPassword(
+                auth,
+                email.toLowerCase(),
+                pass
+            );
+            const userId = userCredential.user.uid;
 
-        if (users.find((u: any) => u.email === email)) {
-            throw new Error('User already exists with this email');
+            // Create user profile in Firestore
+            await setDoc(doc(db, 'users', userId), {
+                firstName,
+                lastName,
+                name: `${firstName} ${lastName}`,
+                email: email.toLowerCase(),
+                createdAt: new Date().toISOString()
+            });
+
+            // User state will be updated by onAuthStateChanged listener
+        } catch (error: any) {
+            if (error.code === 'auth/email-already-in-use') {
+                throw new Error('User already exists with this email');
+            }
+            throw error;
         }
-
-        const newUser = {
-            id: Date.now().toString(),
-            name: `${firstName} ${lastName}`,
-            firstName,
-            lastName,
-            email,
-            pass,
-        };
-
-        users.push(newUser);
-        await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-
-        // Auto login
-        await login(email, pass);
     };
 
     const logout = async () => {
-        setUser(null);
-        await AsyncStorage.removeItem(SESSION_KEY);
+        await signOut(auth);
+        // User state will be updated by onAuthStateChanged listener
     };
 
     const updateProfile = async (data: Partial<User>) => {
         if (!user) return;
 
-        const updatedUser = { ...user, ...data };
-        setUser(updatedUser);
-        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser));
+        try {
+            // Update local state
+            const updatedUser = { ...user, ...data };
+            setUser(updatedUser);
 
-        // Update in DB
-        const json = await AsyncStorage.getItem(USERS_KEY);
-        if (json) {
-            const users = JSON.parse(json);
-            const index = users.findIndex((u: any) => u.id === user.id);
-            if (index !== -1) {
-                users[index] = { ...users[index], ...data };
-                await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-            }
+            // Update Firestore
+            await updateDoc(doc(db, 'users', user.id), {
+                ...data,
+                updatedAt: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            throw error;
         }
     };
 

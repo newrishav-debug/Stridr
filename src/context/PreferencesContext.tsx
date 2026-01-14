@@ -10,6 +10,7 @@
  */
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { StorageService } from '../services/StorageService';
+import { useAuth } from './AuthContext';
 
 export type DistanceUnit = 'km' | 'mi';
 export type Theme = 'light' | 'dark';
@@ -78,13 +79,18 @@ const PreferencesContext = createContext<PreferencesContextType>({
 export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
 
-    // Load preferences on mount
+    const { user } = useAuth();
+
+    // Load preferences on mount or when user changes
     useEffect(() => {
-        loadPreferences();
-    }, []);
+        if (user) {
+            loadPreferences();
+        }
+    }, [user]);
 
     const loadPreferences = async () => {
-        const stored = await StorageService.getPreferences();
+        if (!user) return;
+        const stored = await StorageService.getPreferences(user.id);
         if (stored) {
             // Merge with defaults to handle backward compatibility and new fields
             setPreferences({ ...defaultPreferences, ...stored });
@@ -92,9 +98,10 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
 
     const updatePreference = async (key: keyof Preferences, value: any) => {
+        if (!user) return;
         const newPrefs = { ...preferences, [key]: value };
         setPreferences(newPrefs);
-        await StorageService.savePreferences(newPrefs);
+        await StorageService.savePreferences(user.id, newPrefs);
     };
 
     const setDistanceUnit = (unit: DistanceUnit) => updatePreference('distanceUnit', unit);

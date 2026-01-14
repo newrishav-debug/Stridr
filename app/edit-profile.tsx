@@ -7,18 +7,20 @@
  * Modification History:
  * 2024-01-12: Documentation added.
  */
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../src/context/AuthContext';
 import { ChevronLeft, Camera, Mail, Lock, User } from 'lucide-react-native';
 import { useTheme } from '../src/context/PreferencesContext';
+import { useToast } from '../src/context/ToastContext';
 
 export default function EditProfileScreen() {
     const router = useRouter();
     const { user, updateProfile } = useAuth();
     const theme = useTheme();
+    const { showToast } = useToast();
 
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
@@ -29,10 +31,10 @@ export default function EditProfileScreen() {
             if (user) {
                 await updateProfile({ name, profileImage: image || undefined });
             }
-            Alert.alert('Success', 'Profile updated successfully!');
+            showToast('Profile updated successfully!', 'success');
             router.back();
         } catch (error) {
-            Alert.alert('Error', 'Failed to update profile');
+            showToast('Failed to update profile', 'error');
         }
     };
 
@@ -50,7 +52,7 @@ export default function EditProfileScreen() {
     };
 
     const handleResetPassword = () => {
-        Alert.alert('Reset Password', 'Password reset email sent!');
+        showToast('Password reset email sent!', 'success');
     };
 
     return (

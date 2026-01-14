@@ -11,10 +11,11 @@
  * 2026-01-13: Removed social login buttons (Google/Facebook).
  */
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ImageBackground, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ImageBackground, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useAuth } from '../src/context/AuthContext';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useToast } from '../src/context/ToastContext';
 
 export default function SignupScreen() {
     const [firstName, setFirstName] = useState('');
@@ -24,6 +25,7 @@ export default function SignupScreen() {
     const [confirmPass, setConfirmPass] = useState('');
     const { register } = useAuth();
     const router = useRouter();
+    const { showToast } = useToast();
 
     const validateEmail = (email: string) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,32 +36,32 @@ export default function SignupScreen() {
         try {
             // Validation
             if (!firstName.trim()) {
-                return Alert.alert('Error', 'Please enter your first name');
+                return showToast('Please enter your first name', 'error');
             }
             if (!lastName.trim()) {
-                return Alert.alert('Error', 'Please enter your last name');
+                return showToast('Please enter your last name', 'error');
             }
             if (!email.trim()) {
-                return Alert.alert('Error', 'Please enter your email');
+                return showToast('Please enter your email', 'error');
             }
             if (!validateEmail(email)) {
-                return Alert.alert('Error', 'Please enter a valid email address');
+                return showToast('Please enter a valid email address', 'error');
             }
             if (!pass) {
-                return Alert.alert('Error', 'Please enter a password');
+                return showToast('Please enter a password', 'error');
             }
             if (pass.length < 6) {
-                return Alert.alert('Error', 'Password must be at least 6 characters');
+                return showToast('Password must be at least 6 characters', 'error');
             }
             if (pass !== confirmPass) {
-                return Alert.alert('Error', 'Passwords do not match');
+                return showToast('Passwords do not match', 'error');
             }
 
             await register(firstName.trim(), lastName.trim(), email.trim(), pass);
-            Alert.alert('Success', 'Account created! Logging you in...');
+            showToast('Account created! Logging you in...', 'success');
             router.replace('/');
         } catch (e: any) {
-            Alert.alert('Registration Failed', e.message);
+            showToast(e.message || 'Registration Failed', 'error');
         }
     };
 

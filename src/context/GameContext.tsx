@@ -58,10 +58,28 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const loadData = async (userId: string) => {
         setIsLoading(true);
-        const p = await StorageService.getProgress(userId);
-        if (p && !p.completedTrails) {
+        let p = await StorageService.getProgress(userId);
+
+        // Initialize progress for new users
+        if (!p) {
+            p = {
+                selectedTrailId: null,
+                trailStartDate: null,
+                targetDays: 7,
+                totalStepsValid: 0,
+                currentDistanceMeters: 0,
+                lastSyncTime: new Date().toISOString(),
+                unlockedBadges: [],
+                currentStreak: 0,
+                lastLogDate: null,
+                completedTrails: [],
+            };
+            await StorageService.saveProgress(userId, p);
+        }
+
+        if (!p.completedTrails) {
             p.completedTrails = []; // Initialize if missing
-        } else if (p && p.completedTrails.length > 0 && typeof p.completedTrails[0] === 'string') {
+        } else if (p.completedTrails.length > 0 && typeof p.completedTrails[0] === 'string') {
             // Migration: Convert old string IDs to CompletedTrail objects
             console.log('Migrating completedTrails from strings to objects');
             p.completedTrails = (p.completedTrails as any[]).map((id: string) => ({
@@ -75,11 +93,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }));
         }
 
-
         setProgress(p);
-
-        // Save user ID for background tasks
-        await StorageService.saveCurrentUserId(userId);
 
         const permitted = await StepService.requestPermissions();
         if (permitted) {
@@ -179,7 +193,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const nowString = now.toISOString().split('T')[0];
 
                 // Get user preferences for notifications
-                const prefs = await StorageService.getPreferences();
+                const prefs = await StorageService.getPreferences(user.id);
                 const notificationsEnabled = prefs?.notificationsEnabled ?? false;
                 const notifSettings = prefs?.notificationSettings;
 

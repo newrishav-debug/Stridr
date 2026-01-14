@@ -14,7 +14,6 @@ import { useGame } from '../../src/context/GameContext';
 import { usePreferences, useTheme } from '../../src/context/PreferencesContext';
 import { getDistanceValue, getDistanceUnit } from '../../src/utils/conversion';
 import { LinearGradient } from 'expo-linear-gradient';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import { ArrowLeft, MapPin, Clock, Mountain, Award, Navigation } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -37,47 +36,6 @@ export default function TrailDetailScreen() {
     }
 
     const isActive = progress?.selectedTrailId === trail.id;
-
-    // Generate route coordinates for polyline using landmarks for more realistic path
-    const getRouteCoordinates = () => {
-        if (!trail.startCoordinate || !trail.endCoordinate) return [];
-
-        const start = trail.startCoordinate;
-        const end = trail.endCoordinate;
-        const points = [start];
-
-        // Use landmarks with coordinates if available, otherwise interpolate
-        const landmarksWithCoords = trail.landmarks.filter(lm => lm.coordinate);
-
-        if (landmarksWithCoords.length > 0) {
-            // Create path through landmark waypoints for realistic trail route
-            landmarksWithCoords.forEach(landmark => {
-                if (landmark.coordinate) {
-                    points.push(landmark.coordinate);
-                }
-            });
-        } else {
-            // Fallback: Create a more realistic curved path with multiple waypoints
-            const steps = 15;
-            for (let i = 1; i < steps; i++) {
-                const t = i / steps;
-                const lat = start.latitude + (end.latitude - start.latitude) * t;
-                const lng = start.longitude + (end.longitude - start.longitude) * t;
-
-                // Vary the path based on trail characteristics to look like realistic route
-                const variance = Math.sin(t * Math.PI * 3) * 0.003;
-                const offset = Math.cos(t * Math.PI * 2) * 0.002;
-
-                points.push({
-                    latitude: lat + variance,
-                    longitude: lng + offset
-                });
-            }
-        }
-
-        points.push(end);
-        return points;
-    };
 
     // Calculate estimated completion time based on difficulty and terrain
     const getEstimatedTime = () => {
@@ -120,22 +78,7 @@ export default function TrailDetailScreen() {
         }
     };
 
-    const handleOpenInMaps = () => {
-        if (!trail.startCoordinate || !trail.endCoordinate) return;
 
-        const start = trail.startCoordinate;
-        const end = trail.endCoordinate;
-
-        // iOS: Use Apple Maps with walking directions from start to end
-        if (Platform.OS === 'ios') {
-            const url = `maps://?saddr=${start.latitude},${start.longitude}&daddr=${end.latitude},${end.longitude}&dirflg=w`;
-            Linking.openURL(url);
-        } else {
-            // Android: Use Google Maps with walking directions
-            const url = `https://www.google.com/maps/dir/?api=1&origin=${start.latitude},${start.longitude}&destination=${end.latitude},${end.longitude}&travelmode=walking`;
-            Linking.openURL(url);
-        }
-    };
 
     const handleStartTrail = () => {
         const hasActiveTrail = progress?.selectedTrailId && progress.selectedTrailId !== trail.id;
@@ -217,61 +160,6 @@ export default function TrailDetailScreen() {
                         <Text style={[styles.extendedDescription, { color: theme.textSecondary }]}>{trail.extendedDescription}</Text>
                     )}
                 </View>
-
-                {/* Map Section */}
-                {trail.region && (
-                    <View style={styles.mapSection}>
-                        <TouchableOpacity
-                            style={styles.mapContainer}
-                            onPress={handleOpenInMaps}
-                            activeOpacity={0.9}
-                        >
-                            <MapView
-                                style={styles.map}
-                                provider={PROVIDER_DEFAULT}
-                                initialRegion={trail.region}
-                                scrollEnabled={false}
-                                zoomEnabled={false}
-                                pitchEnabled={false}
-                                rotateEnabled={false}
-                                pointerEvents="none"
-                            >
-                                {/* Route Polyline */}
-                                <Polyline
-                                    coordinates={getRouteCoordinates()}
-                                    strokeColor={trail.color}
-                                    strokeWidth={4}
-                                />
-
-                                {/* Start Marker */}
-                                {trail.startCoordinate && (
-                                    <Marker
-                                        coordinate={trail.startCoordinate}
-                                        pinColor="#10B981"
-                                        title="Start"
-                                    />
-                                )}
-
-                                {/* End Marker */}
-                                {trail.endCoordinate && (
-                                    <Marker
-                                        coordinate={trail.endCoordinate}
-                                        pinColor="#EF4444"
-                                        title="End"
-                                    />
-                                )}
-                            </MapView>
-
-                            {/* Navigation Indicator */}
-                            <View style={styles.mapOverlay}>
-                                <Navigation size={16} color={trail.color} />
-                                <Text style={[styles.mapOverlayText, { color: trail.color }]}>
-                                    Tap to open in Maps
-                                </Text>
-                            </View>
-                        </TouchableOpacity>
-                    </View>
-                )}
 
                 {/* Statistics Grid */}
                 <View style={styles.statsSection}>
@@ -470,43 +358,7 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         fontStyle: 'italic',
     },
-    mapSection: {
-        paddingHorizontal: 24,
-        paddingVertical: 16,
-    },
-    mapContainer: {
-        height: 200,
-        borderRadius: 16,
-        overflow: 'hidden',
-        borderWidth: 2,
-        borderColor: '#E5E7EB',
-        position: 'relative',
-    },
-    map: {
-        width: '100%',
-        height: '100%',
-    },
-    mapOverlay: {
-        position: 'absolute',
-        bottom: 12,
-        right: 12,
-        backgroundColor: 'white',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    mapOverlayText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
+
     statsSection: {
         paddingHorizontal: 24,
         paddingVertical: 16,

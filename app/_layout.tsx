@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { PreferencesProvider, usePreferences } from '../src/context/PreferencesContext';
+import { ToastProvider } from '../src/context/ToastContext';
 
 const ProtectedLayout = () => {
     const { user, isLoading } = useAuth();
@@ -41,16 +42,18 @@ const ProtectedLayout = () => {
     return (
         <PreferencesProvider>
             <GameProvider>
-                <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="login" />
-                    <Stack.Screen name="signup" />
-                    <Stack.Screen name="trail/[id]" />
-                    <Stack.Screen name="edit-profile" />
-                    <Stack.Screen name="my-dashboard" />
-                    <Stack.Screen name="preferences" />
-                </Stack>
-                <StatusBar style={preferences.theme === 'dark' ? 'light' : 'dark'} />
+                <ToastProvider>
+                    <Stack screenOptions={{ headerShown: false }}>
+                        <Stack.Screen name="(tabs)" />
+                        <Stack.Screen name="login" />
+                        <Stack.Screen name="signup" />
+                        <Stack.Screen name="trail/[id]" />
+                        <Stack.Screen name="edit-profile" />
+                        <Stack.Screen name="my-dashboard" />
+                        <Stack.Screen name="preferences" />
+                    </Stack>
+                    <StatusBar style={preferences.theme === 'dark' ? 'light' : 'dark'} />
+                </ToastProvider>
             </GameProvider>
         </PreferencesProvider>
     );
