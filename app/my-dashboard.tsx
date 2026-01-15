@@ -6,6 +6,7 @@
  *
  * Modification History:
  * 2024-01-12: Created dashboard screen.
+ * 2026-01-14: Added weekly/monthly stats, goal rate, personal records, landmarks, next badge progress.
  */
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -13,30 +14,85 @@ import { useAuth } from '../src/context/AuthContext';
 import { useGame } from '../src/context/GameContext';
 import { usePreferences, useTheme } from '../src/context/PreferencesContext';
 import { getDistanceValue, getDistanceUnit } from '../src/utils/conversion';
-import { Award, Target, Footprints, MapPin, Flame, ChevronLeft, Trophy, Flag, ChevronRight, Calendar, Clock, BarChart2, CheckCircle2 } from 'lucide-react-native';
+import {
+    Award, Target, Footprints, MapPin, ChevronLeft, Trophy, Flag, ChevronRight,
+    Calendar, BarChart2, CheckCircle2, TrendingUp, TrendingDown, Minus, Zap,
+    Star, Crown, Mountain, RefreshCw
+} from 'lucide-react-native';
 import { ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BADGES, getBadgeDescription } from '../src/const/badges';
+import { BADGES } from '../src/const/badges';
 import { TRAILS } from '../src/const/trails';
+import { CalendarView } from '../src/components/CalendarView';
+import { SimpleLineChart } from '../src/components/SimpleLineChart';
+import { StepService } from '../src/services/StepService';
+import { DashboardStatsService, WeeklyStats, GoalAchievementStats, PersonalRecords, NextBadgeProgress, filterHistoryByStartDate } from '../src/services/DashboardStatsService';
+import { useState, useEffect, useMemo } from 'react';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function MyDashboardScreen() {
     const router = useRouter();
     const { user } = useAuth();
-    const { progress, todaySteps, completedTrailsCount } = useGame();
+    const { progress, todaySteps, sync } = useGame();
     const { preferences } = usePreferences();
     const theme = useTheme();
 
+    const [monthlyHistory, setMonthlyHistory] = useState<{ date: string; steps: number }[]>([]);
+    const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null);
+    const [monthlySteps, setMonthlySteps] = useState(0);
+    const [goalAchievement, setGoalAchievement] = useState<GoalAchievementStats | null>(null);
+    const [personalRecords, setPersonalRecords] = useState<PersonalRecords | null>(null);
+    const [chartData, setChartData] = useState<{ label: string; value: number }[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
+
     if (!user) return null;
 
-    const distanceValue = progress?.currentDistanceMeters
-        ? getDistanceValue(progress.currentDistanceMeters, preferences.distanceUnit)
+    const dailyGoal = preferences.dailyGoal;
+    const distanceValue = progress?.stats?.totalDistanceMetersLifetime
+        ? getDistanceValue(progress.stats.totalDistanceMetersLifetime, preferences.distanceUnit)
         : 0;
     const distanceUnit = getDistanceUnit(preferences.distanceUnit);
-    const totalSteps = progress?.totalStepsValid || 0;
-    const currentStreak = progress?.currentStreak || 0;
+    const totalSteps = progress?.stats?.totalStepsLifetime || 0;
     const unlockedBadges = progress?.unlockedBadges || [];
+    const goalProgress = Math.min((todaySteps / dailyGoal) * 100, 100);
+
+    // Calculate derived stats
+    const landmarksReached = useMemo(() =>
+        DashboardStatsService.getLandmarksReached(progress, TRAILS),
+        [progress]
+    );
+
+    const nextBadge = useMemo(() =>
+        DashboardStatsService.getNextBadgeProgress(progress),
+        [progress]
+    );
+
+    useEffect(() => {
+        const loadStats = async () => {
+            setIsLoading(true);
+            try {
+                const currentYear = new Date().getFullYear();
+                const rawHistory = await StepService.getYearlyHistory(currentYear);
+
+                // Filter history to only include data from when user joined
+                const history = filterHistoryByStartDate(rawHistory, user?.createdAt);
+
+                setMonthlyHistory(history);
+                setWeeklyStats(DashboardStatsService.getWeeklyStats(history));
+                setMonthlySteps(DashboardStatsService.getMonthlySteps(history));
+                setGoalAchievement(DashboardStatsService.getGoalAchievementRate(history, dailyGoal));
+                setPersonalRecords(DashboardStatsService.getPersonalRecords(history));
+                setChartData(DashboardStatsService.getChartData(history, 7));
+            } catch (error) {
+                console.error('Failed to load dashboard stats:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadStats();
+    }, [todaySteps, dailyGoal, user?.createdAt]);
 
     // Calculate badge statistics
     const unlockedBadgeObjects = (progress?.unlockedBadges || [])
@@ -48,15 +104,17 @@ export default function MyDashboardScreen() {
     const activeTrail = progress?.selectedTrailId
         ? TRAILS.find(t => t.id === progress.selectedTrailId)
         : null;
-    // const completedTrailsCount: number = 0; // Handled by Context now
     const currentDistance = progress?.currentDistanceMeters || 0;
     const trailProgress = activeTrail
         ? Math.min((currentDistance / activeTrail.totalDistanceMeters) * 100, 100)
         : 0;
 
-    // Daily step goal from user preferences
-    const dailyGoal = preferences.dailyGoal;
-    const goalProgress = Math.min((todaySteps / dailyGoal) * 100, 100);
+    // Trend icon helper
+    const TrendIcon = ({ trend, size = 16 }: { trend: 'up' | 'down' | 'same'; size?: number }) => {
+        if (trend === 'up') return <TrendingUp size={size} color="#10B981" />;
+        if (trend === 'down') return <TrendingDown size={size} color="#EF4444" />;
+        return <Minus size={size} color="#6B7280" />;
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -66,12 +124,27 @@ export default function MyDashboardScreen() {
                     <ChevronLeft size={24} color={theme.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: theme.text }]}>My Dashboard</Text>
-                <View style={{ width: 24 }} />
+                <TouchableOpacity
+                    onPress={async () => {
+                        setIsSyncing(true);
+                        await sync();
+                        setIsSyncing(false);
+                    }}
+                    style={styles.syncButton}
+                    disabled={isSyncing}
+                >
+                    <RefreshCw
+                        size={20}
+                        color={isSyncing ? theme.textTertiary : '#3B82F6'}
+                        style={isSyncing ? { opacity: 0.5 } : undefined}
+                    />
+                </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.contentContainer}>
-                    {/* Daily Goal Progress */}
+
+                    {/* ===== SECTION 1: TODAY'S GOAL ===== */}
                     <View style={[styles.goalSection, { backgroundColor: theme.card }]}>
                         <View style={styles.goalHeader}>
                             <Target size={24} color="#10B981" />
@@ -95,46 +168,217 @@ export default function MyDashboardScreen() {
                         </View>
                     </View>
 
-                    {/* Enhanced Statistics */}
-                    <View style={styles.statsSection}>
-                        <Text style={[styles.sectionTitle, { color: theme.text }]}>Overall Statistics</Text>
-
-                        <View style={styles.statsGrid}>
-                            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-                                <View style={[styles.statIcon, { backgroundColor: '#EF4444' }]}>
-                                    <Flame size={24} color="white" />
+                    {/* ===== SECTION 2: THIS WEEK & MONTH ===== */}
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>Weekly & Monthly</Text>
+                    <View style={styles.weeklyMonthlyRow}>
+                        {/* Weekly Stats Card */}
+                        <View style={[styles.halfCard, { backgroundColor: theme.card }]}>
+                            <View style={styles.cardIconRow}>
+                                <View style={[styles.miniIcon, { backgroundColor: '#3B82F6' }]}>
+                                    <Calendar size={16} color="white" />
                                 </View>
-                                <Text style={[styles.statValue, { color: theme.text }]}>{currentStreak}</Text>
-                                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Day Streak</Text>
+                                <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>This Week</Text>
                             </View>
-
-                            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-                                <View style={[styles.statIcon, { backgroundColor: '#3B82F6' }]}>
-                                    <Footprints size={24} color="white" />
+                            <Text style={[styles.cardValue, { color: theme.text }]}>
+                                {(weeklyStats?.thisWeek || 0).toLocaleString()}
+                            </Text>
+                            {weeklyStats && (
+                                <View style={styles.trendRow}>
+                                    <TrendIcon trend={weeklyStats.trend} />
+                                    <Text style={[
+                                        styles.trendText,
+                                        { color: weeklyStats.trend === 'up' ? '#10B981' : weeklyStats.trend === 'down' ? '#EF4444' : '#6B7280' }
+                                    ]}>
+                                        {Math.abs(weeklyStats.changePercent)}% vs last week
+                                    </Text>
                                 </View>
-                                <Text style={[styles.statValue, { color: theme.text }]}>{totalSteps.toLocaleString()}</Text>
-                                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Steps</Text>
-                            </View>
+                            )}
+                        </View>
 
-                            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-                                <View style={[styles.statIcon, { backgroundColor: '#10B981' }]}>
-                                    <MapPin size={24} color="white" />
+                        {/* Monthly Steps Card */}
+                        <View style={[styles.halfCard, { backgroundColor: theme.card }]}>
+                            <View style={styles.cardIconRow}>
+                                <View style={[styles.miniIcon, { backgroundColor: '#8B5CF6' }]}>
+                                    <BarChart2 size={16} color="white" />
                                 </View>
-                                <Text style={[styles.statValue, { color: theme.text }]}>{distanceValue.toFixed(1)} {distanceUnit}</Text>
-                                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Distance</Text>
+                                <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>This Month</Text>
                             </View>
-
-                            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-                                <View style={[styles.statIcon, { backgroundColor: '#F59E0B' }]}>
-                                    <Award size={24} color="white" />
-                                </View>
-                                <Text style={[styles.statValue, { color: theme.text }]}>{unlockedBadges.length}</Text>
-                                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Badges</Text>
-                            </View>
+                            <Text style={[styles.cardValue, { color: theme.text }]}>
+                                {monthlySteps.toLocaleString()}
+                            </Text>
+                            <Text style={[styles.cardSubtext, { color: theme.textSecondary }]}>
+                                {new Date().toLocaleDateString('en-US', { month: 'long' })}
+                            </Text>
                         </View>
                     </View>
 
-                    {/* Achievement Highlights */}
+                    {/* ===== SECTION 3: GOAL ACHIEVEMENT RATE ===== */}
+                    {goalAchievement && (
+                        <View style={[styles.achievementCard, { backgroundColor: theme.card }]}>
+                            <View style={styles.achievementLeft}>
+                                <View style={[styles.achievementIcon, { backgroundColor: goalAchievement.rate >= 70 ? '#10B981' : goalAchievement.rate >= 40 ? '#F59E0B' : '#EF4444' }]}>
+                                    <Zap size={24} color="white" />
+                                </View>
+                                <View>
+                                    <Text style={[styles.achievementLabel, { color: theme.textSecondary }]}>Goal Achievement</Text>
+                                    <Text style={[styles.achievementValue, { color: theme.text }]}>{goalAchievement.rate}%</Text>
+                                </View>
+                            </View>
+                            <View style={styles.achievementRight}>
+                                <Text style={[styles.achievementDetail, { color: theme.textSecondary }]}>
+                                    {goalAchievement.daysHit}/{goalAchievement.totalDays} in Last 14 Days
+                                </Text>
+                                <View style={[styles.miniProgressBar, { backgroundColor: theme.border }]}>
+                                    <View style={[styles.miniProgressFill, {
+                                        width: `${goalAchievement.rate}%`,
+                                        backgroundColor: goalAchievement.rate >= 70 ? '#10B981' : goalAchievement.rate >= 40 ? '#F59E0B' : '#EF4444'
+                                    }]} />
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* ===== SECTION 4: STEP TREND CHART ===== */}
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>7-Day Trend</Text>
+                    <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
+                        {chartData.length > 0 ? (
+                            <SimpleLineChart
+                                data={chartData}
+                                height={180}
+                                lineColor="#3B82F6"
+                                fillColor="rgba(59, 130, 246, 0.1)"
+                                labelColor={theme.textSecondary}
+                                gridColor={theme.border}
+                                showDots={true}
+                                showLabels={true}
+                                showValues={true}
+                            />
+                        ) : (
+                            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No step data available</Text>
+                        )}
+                    </View>
+
+                    {/* ===== SECTION 4B: MONTHLY GOAL HISTORY ===== */}
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>Monthly Goal History</Text>
+                    <CalendarView history={monthlyHistory} dailyGoal={dailyGoal} />
+
+                    {/* ===== SECTION 5: PERSONAL RECORDS ===== */}
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>Personal Records</Text>
+                    <View style={styles.recordsRow}>
+                        <View style={[styles.recordCard, { backgroundColor: theme.card }]}>
+                            <View style={[styles.recordIcon, { backgroundColor: '#FFD700' }]}>
+                                <Crown size={18} color="white" />
+                            </View>
+                            <Text style={[styles.recordValue, { color: theme.text }]}>
+                                {(personalRecords?.bestDay.steps || 0).toLocaleString()}
+                            </Text>
+                            <Text style={[styles.recordLabel, { color: theme.textSecondary }]}>Best Day</Text>
+                            {personalRecords?.bestDay.date && (
+                                <Text style={[styles.recordDate, { color: theme.textTertiary }]}>
+                                    {new Date(personalRecords.bestDay.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+                                </Text>
+                            )}
+                        </View>
+                        <View style={[styles.recordCard, { backgroundColor: theme.card }]}>
+                            <View style={[styles.recordIcon, { backgroundColor: '#C0C0C0' }]}>
+                                <Star size={18} color="white" />
+                            </View>
+                            <Text style={[styles.recordValue, { color: theme.text }]}>
+                                {(personalRecords?.bestWeek.steps || 0).toLocaleString()}
+                            </Text>
+                            <Text style={[styles.recordLabel, { color: theme.textSecondary }]}>Best Week</Text>
+                            {personalRecords?.bestWeek.weekStart && (
+                                <Text style={[styles.recordDate, { color: theme.textTertiary }]}>
+                                    {(() => {
+                                        const start = new Date(personalRecords.bestWeek.weekStart);
+                                        const end = new Date(start);
+                                        end.setDate(end.getDate() + 6);
+                                        return `${start.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}`;
+                                    })()}
+                                </Text>
+                            )}
+                        </View>
+                        <View style={[styles.recordCard, { backgroundColor: theme.card }]}>
+                            <View style={[styles.recordIcon, { backgroundColor: '#CD7F32' }]}>
+                                <Trophy size={18} color="white" />
+                            </View>
+                            <Text style={[styles.recordValue, { color: theme.text }]}>
+                                {(personalRecords?.bestMonth.steps || 0).toLocaleString()}
+                            </Text>
+                            <Text style={[styles.recordLabel, { color: theme.textSecondary }]}>Best Month</Text>
+                            {personalRecords?.bestMonth.month && (
+                                <Text style={[styles.recordDate, { color: theme.textTertiary }]}>
+                                    {new Date(personalRecords.bestMonth.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                </Text>
+                            )}
+                        </View>
+                    </View>
+
+                    {/* ===== SECTION 6: LIFETIME STATS ===== */}
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>Lifetime Stats</Text>
+                    <View style={styles.statsGrid}>
+                        <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                            <View style={[styles.statIcon, { backgroundColor: '#3B82F6' }]}>
+                                <Footprints size={24} color="white" />
+                            </View>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{totalSteps.toLocaleString()}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Steps</Text>
+                        </View>
+
+                        <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                            <View style={[styles.statIcon, { backgroundColor: '#10B981' }]}>
+                                <MapPin size={24} color="white" />
+                            </View>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{distanceValue.toFixed(1)} {distanceUnit}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Distance</Text>
+                        </View>
+
+                        <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                            <View style={[styles.statIcon, { backgroundColor: '#F59E0B' }]}>
+                                <Award size={24} color="white" />
+                            </View>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{unlockedBadges.length}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Badges</Text>
+                        </View>
+
+                        <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                            <View style={[styles.statIcon, { backgroundColor: '#EC4899' }]}>
+                                <Mountain size={24} color="white" />
+                            </View>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{landmarksReached}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Landmarks</Text>
+                        </View>
+                    </View>
+
+                    {/* ===== SECTION 7: NEXT BADGE PROGRESS ===== */}
+                    {nextBadge && (
+                        <>
+                            <Text style={[styles.sectionTitle, { color: theme.text }]}>Next Badge</Text>
+                            <View style={[styles.nextBadgeCard, { backgroundColor: theme.card }]}>
+                                <View style={styles.nextBadgeLeft}>
+                                    <View style={[styles.nextBadgeIconBg, { backgroundColor: theme.backgroundTertiary }]}>
+                                        <Text style={styles.nextBadgeEmoji}>{nextBadge.badge.icon}</Text>
+                                    </View>
+                                    <View style={styles.nextBadgeInfo}>
+                                        <Text style={[styles.nextBadgeName, { color: theme.text }]}>{nextBadge.badge.name}</Text>
+                                        <Text style={[styles.nextBadgeDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                                            {nextBadge.badge.description}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={styles.nextBadgeProgress}>
+                                    <Text style={[styles.nextBadgePercent, { color: '#3B82F6' }]}>{nextBadge.percent}%</Text>
+                                    <View style={[styles.nextBadgeProgressBar, { backgroundColor: theme.border }]}>
+                                        <View style={[styles.nextBadgeProgressFill, { width: `${nextBadge.percent}%` }]} />
+                                    </View>
+                                </View>
+                            </View>
+                        </>
+                    )}
+
+
+
+                    {/* ===== SECTION 9: ACHIEVEMENT HIGHLIGHTS ===== */}
                     {recentBadges.length > 0 && (
                         <View style={styles.achievementsSection}>
                             <View style={styles.sectionHeader}>
@@ -165,7 +409,7 @@ export default function MyDashboardScreen() {
                                             {badge.name}
                                         </Text>
                                         <Text style={[styles.badgeDescription, { color: theme.textSecondary }]} numberOfLines={2}>
-                                            {getBadgeDescription(badge, preferences.distanceUnit)}
+                                            {badge.description}
                                         </Text>
                                     </View>
                                 ))}
@@ -173,7 +417,7 @@ export default function MyDashboardScreen() {
                         </View>
                     )}
 
-                    {/* Trail Stats */}
+                    {/* ===== SECTION 10: TRAIL STATS ===== */}
                     <View style={styles.trailStatsSection}>
                         <Text style={[styles.sectionTitle, { color: theme.text }]}>Trail Stats</Text>
 
@@ -237,7 +481,7 @@ export default function MyDashboardScreen() {
                                         <Trophy size={20} color="#10B981" />
                                     </View>
                                     <Text style={[styles.trailStatLabel, { color: theme.textSecondary, marginBottom: 0, marginLeft: 12 }]}>
-                                        Completed Trails ({completedTrailsCount})
+                                        Completed Trails ({progress?.stats?.completedTrailsCount || 0})
                                     </Text>
                                 </View>
 
@@ -248,7 +492,6 @@ export default function MyDashboardScreen() {
                                             if (!trailInfo) return null;
 
                                             const PLACEHOLDER_IMG = { uri: 'https://via.placeholder.com/400x200' };
-                                            // Fallback image if trail image is missing
                                             const trailImage = trailInfo.image || PLACEHOLDER_IMG;
 
                                             return (
@@ -347,12 +590,16 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
     },
+    syncButton: {
+        padding: 4,
+    },
     scrollContent: {
         flex: 1,
     },
     contentContainer: {
         padding: 20,
     },
+    // Today's Goal Section
     goalSection: {
         marginBottom: 24,
         borderRadius: 16,
@@ -416,22 +663,174 @@ const styles = StyleSheet.create({
     goalPercentage: {
         fontSize: 14,
     },
+    // Section Titles
     sectionTitle: {
-        fontSize: 20,
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        marginTop: 8,
+    },
+    // Weekly & Monthly Cards
+    weeklyMonthlyRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 16,
+    },
+    halfCard: {
+        flex: 1,
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    cardIconRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+    miniIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    cardLabel: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    cardValue: {
+        fontSize: 22,
         fontWeight: 'bold',
         marginBottom: 4,
     },
-    statsSection: {
+    cardSubtext: {
+        fontSize: 12,
+    },
+    trendRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginTop: 4,
+    },
+    trendText: {
+        fontSize: 11,
+        fontWeight: '500',
+    },
+    // Achievement Rate Card
+    achievementCard: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    achievementLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    achievementIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    achievementLabel: {
+        fontSize: 12,
+    },
+    achievementValue: {
+        fontSize: 24,
+        fontWeight: 'bold',
+    },
+    achievementRight: {
+        alignItems: 'flex-end',
+    },
+    achievementDetail: {
+        fontSize: 11,
+        marginBottom: 4,
+    },
+    miniProgressBar: {
+        width: 80,
+        height: 6,
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    miniProgressFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    // Chart Card
+    chartCard: {
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    emptyText: {
+        textAlign: 'center',
+        fontStyle: 'italic',
+        paddingVertical: 40,
+    },
+    // Personal Records
+    recordsRow: {
+        flexDirection: 'row',
+        gap: 10,
         marginBottom: 24,
     },
+    recordCard: {
+        flex: 1,
+        borderRadius: 14,
+        padding: 12,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    recordIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    recordValue: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 2,
+    },
+    recordLabel: {
+        fontSize: 10,
+        textAlign: 'center',
+    },
+    recordDate: {
+        fontSize: 9,
+        textAlign: 'center',
+        marginTop: 2,
+    },
+    // Lifetime Stats Grid
     statsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 12,
-        marginTop: 16,
+        marginBottom: 24,
     },
     statCard: {
-        width: (SCREEN_WIDTH - 52) / 2, // 20 padding * 2 = 40, + 12 gap = 52
+        width: (SCREEN_WIDTH - 52) / 2,
         borderRadius: 16,
         padding: 16,
         alignItems: 'center',
@@ -449,14 +848,70 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     statValue: {
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: 'bold',
         marginBottom: 4,
     },
     statLabel: {
-        fontSize: 14,
+        fontSize: 13,
     },
-    // Achievement Highlights Section
+    // Next Badge Card
+    nextBadgeCard: {
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    nextBadgeLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 12,
+    },
+    nextBadgeIconBg: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    nextBadgeEmoji: {
+        fontSize: 32,
+    },
+    nextBadgeInfo: {
+        flex: 1,
+    },
+    nextBadgeName: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    nextBadgeDesc: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    nextBadgeProgress: {
+        alignItems: 'flex-end',
+    },
+    nextBadgePercent: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    nextBadgeProgressBar: {
+        width: '100%',
+        height: 8,
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    nextBadgeProgressFill: {
+        height: '100%',
+        backgroundColor: '#3B82F6',
+        borderRadius: 4,
+    },
+    // Achievements Section
     achievementsSection: {
         marginBottom: 24,
     },
@@ -587,12 +1042,11 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     completedList: {
-        gap: 16, // Increase gap for larger cards
+        gap: 16,
     },
     completedTrailCard: {
-        height: 200, // Fixed height for visual impact
+        height: 200,
         borderRadius: 16,
-        // No background color here, handled by ImageBackground
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
@@ -606,7 +1060,7 @@ const styles = StyleSheet.create({
     },
     completedTrailGradient: {
         flex: 1,
-        justifyContent: 'flex-end', // Push content to bottom
+        justifyContent: 'flex-end',
         padding: 16,
     },
     completedTrailContent: {
@@ -639,12 +1093,12 @@ const styles = StyleSheet.create({
     completedDateText: {
         fontSize: 11,
         fontWeight: '700',
-        color: '#059669', // Emerald 600
+        color: '#059669',
     },
     completedStatsRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-end', // Align text baseline ideally
+        alignItems: 'flex-end',
         paddingTop: 12,
         borderTopWidth: 1,
         borderTopColor: 'rgba(255, 255, 255, 0.2)',
@@ -669,7 +1123,6 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
-
     emptyCompleted: {
         paddingVertical: 24,
         alignItems: 'center',
@@ -679,5 +1132,9 @@ const styles = StyleSheet.create({
     emptyCompletedText: {
         fontSize: 15,
         fontStyle: 'italic',
+    },
+    verticalDivider: {
+        width: 1,
+        backgroundColor: 'rgba(255,255,255,0.3)',
     },
 });

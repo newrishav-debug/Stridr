@@ -116,6 +116,24 @@ export const DebugMenu: React.FC = () => {
                             <Text style={styles.btnText}>Add 10k Steps</Text>
                         </TouchableOpacity>
 
+                        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Step Diagnostics</Text>
+                        <TouchableOpacity
+                            style={[styles.btn, { backgroundColor: '#06B6D4' }]}
+                            onPress={async () => {
+                                const { StepService } = await import('../services/StepService');
+                                const steps = await StepService.getTodaySteps();
+                                const now = new Date();
+                                const start = new Date();
+                                start.setHours(0, 0, 0, 0);
+                                Alert.alert(
+                                    'Raw Pedometer Data',
+                                    `Today's Steps: ${steps.toLocaleString()}\n\nQuery Range:\nFrom: ${start.toLocaleTimeString()}\nTo: ${now.toLocaleTimeString()}\n\nIf this differs from your device's Health app, the Pedometer may not be syncing properly. Try:\n1. Closing and reopening the app\n2. Check Motion & Fitness permissions\n3. Restart your device`
+                                );
+                            }}
+                        >
+                            <Text style={styles.btnText}>🔍 Show Raw Pedometer Steps</Text>
+                        </TouchableOpacity>
+
                         <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Streak</Text>
                         <View style={styles.row}>
                             <TouchableOpacity

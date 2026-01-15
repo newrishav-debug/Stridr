@@ -7,14 +7,16 @@
  * Modification History:
  * 2024-01-12: Documentation added.
  */
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, Linking, Platform, ImageBackground } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { TRAILS } from '../../src/const/trails';
+import { TRAILS, CITY_MARATHONS, CLASSIC_MARATHONS } from '../../src/const/trails';
 import { useGame } from '../../src/context/GameContext';
 import { usePreferences, useTheme } from '../../src/context/PreferencesContext';
 import { getDistanceValue, getDistanceUnit } from '../../src/utils/conversion';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, MapPin, Clock, Mountain, Award, Navigation } from 'lucide-react-native';
+import { GoalPromptModal } from '../../src/components/GoalPromptModal';
+import { useState } from 'react';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -24,6 +26,7 @@ export default function TrailDetailScreen() {
     const { selectTrail, progress } = useGame();
     const { preferences } = usePreferences();
     const theme = useTheme();
+    const [modalVisible, setModalVisible] = useState(false);
 
     const trail = TRAILS.find(t => t.id === id);
 
@@ -42,22 +45,36 @@ export default function TrailDetailScreen() {
         const distanceKm = trail.totalDistanceMeters / 1000;
 
         // Adjust pace based on difficulty (realistic hiking speeds)
+        // Adjust pace based on difficulty (realistic hiking speeds)
         let paceKmPerHour;
-        switch (trail.difficulty) {
-            case 'Easy':
-                paceKmPerHour = 4; // Flat, well-maintained trails
-                break;
-            case 'Moderate':
-                paceKmPerHour = 3; // Some elevation, rough terrain
-                break;
-            case 'Hard':
-                paceKmPerHour = 2.5; // Significant elevation, challenging terrain
-                break;
-            case 'Extreme':
-                paceKmPerHour = 2; // Very steep, technical, high elevation
-                break;
-            default:
-                paceKmPerHour = 3.5;
+
+        // Check for Marathon/City trails explicitly using the lists
+        const isCityMarathon = CITY_MARATHONS.some(t => t.id === trail.id);
+        const isClassicMarathon = CLASSIC_MARATHONS.some(t => t.id === trail.id);
+        const hasMarathonKeyword = trail.name.toLowerCase().includes('marathon') ||
+            trail.name.includes('5K') ||
+            trail.name.includes('10K') ||
+            trail.name.includes('Ultra');
+
+        if (isCityMarathon || isClassicMarathon || hasMarathonKeyword) {
+            paceKmPerHour = 5; // Brisk walking speed for city/road trails
+        } else {
+            switch (trail.difficulty) {
+                case 'Easy':
+                    paceKmPerHour = 4; // Flat, well-maintained trails
+                    break;
+                case 'Moderate':
+                    paceKmPerHour = 3; // Some elevation, rough terrain
+                    break;
+                case 'Hard':
+                    paceKmPerHour = 2.5; // Significant elevation, challenging terrain
+                    break;
+                case 'Extreme':
+                    paceKmPerHour = 2; // Very steep, technical, high elevation
+                    break;
+                default:
+                    paceKmPerHour = 3.5;
+            }
         }
 
         const hours = distanceKm / paceKmPerHour;
@@ -104,25 +121,22 @@ export default function TrailDetailScreen() {
     };
 
     const showGoalPrompt = () => {
-        Alert.prompt(
-            'Set Your Goal',
-            'How many days would you like to complete this trail?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Start',
-                    onPress: (days?: string) => {
-                        const numDays = parseInt(days || '7', 10);
-                        if (numDays > 0) {
-                            selectTrail(trail.id, numDays);
-                            router.back();
-                        }
-                    }
-                }
-            ],
-            'plain-text',
-            '7'
-        );
+        setModalVisible(true);
+    };
+
+    const handleModalStart = (days: string) => {
+        const numDays = parseInt(days || '7', 10);
+        if (numDays > 0 && trail) {
+            selectTrail(trail.id, numDays);
+            setModalVisible(false);
+            router.back();
+        } else {
+            setModalVisible(false);
+        }
+    };
+
+    const handleModalCancel = () => {
+        setModalVisible(false);
     };
 
     const handleViewProgress = () => {
@@ -140,18 +154,29 @@ export default function TrailDetailScreen() {
             </TouchableOpacity>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Header Section */}
-                <View style={styles.header}>
-                    {isActive && (
-                        <View style={styles.activeBadge}>
-                            <Text style={styles.activeBadgeText}>ACTIVE TRAIL</Text>
+                {/* Hero Image Section */}
+                <ImageBackground
+                    source={trail.image || { uri: 'https://via.placeholder.com/400x300' }}
+                    style={styles.heroImage}
+                    imageStyle={styles.heroImageStyle}
+                >
+                    <LinearGradient
+                        colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.7)']}
+                        style={styles.heroGradient}
+                    >
+                        <View style={styles.header}>
+                            {isActive && (
+                                <View style={styles.activeBadge}>
+                                    <Text style={styles.activeBadgeText}>ACTIVE TRAIL</Text>
+                                </View>
+                            )}
+                            <Text style={styles.trailName}>{trail.name}</Text>
+                            <View style={styles.difficultyBadge}>
+                                <Text style={styles.difficultyText}>{trail.difficulty}</Text>
+                            </View>
                         </View>
-                    )}
-                    <Text style={[styles.trailName, { color: theme.text }]}>{trail.name}</Text>
-                    <View style={[styles.difficultyBadge, { backgroundColor: theme.backgroundTertiary }]}>
-                        <Text style={[styles.difficultyText, { color: theme.text }]}>{trail.difficulty}</Text>
-                    </View>
-                </View>
+                    </LinearGradient>
+                </ImageBackground>
 
                 {/* Description */}
                 <View style={styles.section}>
@@ -273,7 +298,13 @@ export default function TrailDetailScreen() {
                     </Text>
                 </TouchableOpacity>
             </View>
-        </View>
+
+            <GoalPromptModal
+                visible={modalVisible}
+                onCancel={handleModalCancel}
+                onStart={handleModalStart}
+            />
+        </View >
     );
 }
 
@@ -305,10 +336,21 @@ const styles = StyleSheet.create({
         elevation: 4,
         zIndex: 10,
     },
+    heroImage: {
+        width: '100%',
+        height: 300,
+    },
+    heroImageStyle: {
+        resizeMode: 'cover',
+    },
+    heroGradient: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
     header: {
         paddingHorizontal: 24,
-        paddingTop: 60,
-        paddingBottom: 16,
+        paddingTop: 40,
+        paddingBottom: 24,
     },
     activeBadge: {
         alignSelf: 'flex-start',
@@ -327,18 +369,21 @@ const styles = StyleSheet.create({
     trailName: {
         fontSize: 32,
         fontWeight: 'bold',
-        color: '#111827',
+        color: 'white',
         marginBottom: 12,
+        textShadowColor: 'rgba(0, 0, 0, 0.75)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
     },
     difficultyBadge: {
         alignSelf: 'flex-start',
-        backgroundColor: '#E5E7EB',
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 8,
     },
     difficultyText: {
-        color: '#111827',
+        color: 'white',
         fontSize: 12,
         fontWeight: 'bold',
     },

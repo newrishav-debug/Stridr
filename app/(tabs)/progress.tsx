@@ -12,6 +12,7 @@ import { useGame } from '../../src/context/GameContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { TRAILS } from '../../src/const/trails';
 import { ProgressBar } from '../../src/components/ProgressBar';
+import { GoalPromptModal } from '../../src/components/GoalPromptModal';
 import { metersToKm } from '../../src/utils/conversion';
 import { useState, useRef, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -42,6 +43,7 @@ export default function ProgressScreen() {
     const { preferences } = usePreferences();
     const router = useRouter();
     const [refreshing, setRefreshing] = useState(false);
+    const [extendModalVisible, setExtendModalVisible] = useState(false);
     const [history, setHistory] = useState<{ date: string; steps: number }[]>([]);
     const [showCelebration, setShowCelebration] = useState(false);
     const [celebrationMessage, setCelebrationMessage] = useState('');
@@ -200,26 +202,7 @@ export default function ProgressScreen() {
                             <Text style={[styles.endDateTitle, { color: theme.text }]}>Trail Timeline</Text>
                             <TouchableOpacity
                                 style={[styles.extendButton, { backgroundColor: activeTrail.color }]}
-                                onPress={() => {
-                                    Alert.prompt(
-                                        'Extend Your Trail',
-                                        'How many additional days would you like?',
-                                        [
-                                            { text: 'Cancel', style: 'cancel' },
-                                            {
-                                                text: 'Extend',
-                                                onPress: (days?: string) => {
-                                                    const additionalDays = parseInt(days || '0', 10);
-                                                    if (additionalDays > 0) {
-                                                        extendTrail(additionalDays);
-                                                    }
-                                                }
-                                            }
-                                        ],
-                                        'plain-text',
-                                        '7'
-                                    );
-                                }}
+                                onPress={() => setExtendModalVisible(true)}
                             >
                                 <Text style={styles.extendButtonText}>Extend</Text>
                             </TouchableOpacity>
@@ -448,6 +431,23 @@ export default function ProgressScreen() {
                     </TouchableOpacity>
                 </Animated.View>
             )}
+
+            <GoalPromptModal
+                visible={extendModalVisible}
+                onCancel={() => setExtendModalVisible(false)}
+                onStart={(days) => {
+                    const additionalDays = parseInt(days || '0', 10);
+                    if (additionalDays > 0) {
+                        extendTrail(additionalDays);
+                    }
+                    setExtendModalVisible(false);
+                }}
+                initialDays="3"
+                title="Extend Your Trail"
+                message="How many additional days would you like to add?"
+                submitLabel="Extend"
+                cancelLabel="Cancel"
+            />
         </View>
     );
 }

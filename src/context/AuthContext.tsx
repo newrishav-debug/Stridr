@@ -27,6 +27,7 @@ interface User {
     lastName?: string;
     email: string;
     profileImage?: string;
+    createdAt?: string; // ISO date string of account creation
 }
 
 interface AuthContextType {
@@ -59,7 +60,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             name: userData.name || '',
                             firstName: userData.firstName,
                             lastName: userData.lastName,
-                            profileImage: userData.profileImage
+                            profileImage: userData.profileImage,
+                            createdAt: userData.createdAt
                         });
                     } else {
                         // User doc doesn't exist, sign out

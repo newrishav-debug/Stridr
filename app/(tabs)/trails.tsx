@@ -8,14 +8,16 @@
  * 2024-01-12: Documentation added.
  */
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { useState } from 'react';
 
-import { INDIAN_TRAILS } from '../../src/const/trails';
+import { INDIAN_TRAILS, CLASSIC_MARATHONS, CITY_MARATHONS } from '../../src/const/trails';
 import { useGame } from '../../src/context/GameContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Trail } from '../../src/types';
 import { useRouter } from 'expo-router';
 import { useTheme, usePreferences } from '../../src/context/PreferencesContext';
 import { getDistanceValue, getDistanceUnit } from '../../src/utils/conversion';
+import { GoalPromptModal } from '../../src/components/GoalPromptModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.55;
@@ -26,9 +28,52 @@ export default function TrailsScreen() {
     const theme = useTheme();
     const router = useRouter();
     const { preferences } = usePreferences();
+    const { selectTrail } = useGame();
+    const [modalVisible, setModalVisible] = useState(false);
+    const [selectedTrailIdForModal, setSelectedTrailIdForModal] = useState<string | null>(null);
 
     const handleTrailPress = (trailId: string) => {
         router.push(`/trail/${trailId}`);
+    };
+
+    const handleStartPress = (trailId: string) => {
+        // Check if there's an active trail and user is selecting a different one
+        if (progress?.selectedTrailId && progress.selectedTrailId !== trailId) {
+            Alert.alert(
+                '⚠️ Switch Trail?',
+                'Switching trails will reset your progress. You will lose all historical data and only today\'s steps will count towards the new trail.\n\nAre you sure you want to switch?',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Switch Trail',
+                        style: 'destructive',
+                        onPress: () => {
+                            setSelectedTrailIdForModal(trailId);
+                            setModalVisible(true);
+                        }
+                    }
+                ]
+            );
+        } else {
+            setSelectedTrailIdForModal(trailId);
+            setModalVisible(true);
+        }
+    };
+
+    const handleModalStart = (days: string) => {
+        const numDays = parseInt(days || '7', 10);
+        if (numDays > 0 && selectedTrailIdForModal) {
+            selectTrail(selectedTrailIdForModal, numDays);
+            setModalVisible(false);
+            router.push('/(tabs)/progress');
+        } else {
+            setModalVisible(false);
+        }
+    };
+
+    const handleModalCancel = () => {
+        setModalVisible(false);
+        setSelectedTrailIdForModal(null);
     };
 
     const renderTrailCard = (trail: Trail, index: number, isFirstInSection: boolean) => {
@@ -84,9 +129,15 @@ export default function TrailsScreen() {
                     </View>
 
                     {!isActive && (
-                        <View style={[styles.selectButton, { backgroundColor: trail.color }]}>
+                        <TouchableOpacity
+                            style={[styles.selectButton, { backgroundColor: trail.color }]}
+                            onPress={(e) => {
+                                e.stopPropagation();
+                                handleStartPress(trail.id);
+                            }}
+                        >
                             <Text style={styles.selectButtonText}>Start Trail</Text>
-                        </View>
+                        </TouchableOpacity>
                     )}
                 </View>
             </TouchableOpacity>
@@ -119,6 +170,38 @@ export default function TrailsScreen() {
                 </ScrollView>
             </View>
 
+            {/* Classic Marathons Section */}
+            <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Classic Marathons</Text>
+                <ScrollView
+                    horizontal
+                    pagingEnabled={false}
+                    showsHorizontalScrollIndicator={false}
+                    decelerationRate="fast"
+                    snapToInterval={CARD_WIDTH + CARD_SPACING}
+                    snapToAlignment="start"
+                    contentContainerStyle={styles.scrollContent}
+                >
+                    {CLASSIC_MARATHONS.map((trail, index) => renderTrailCard(trail, index, true))}
+                </ScrollView>
+            </View>
+
+            {/* City Marathons Section */}
+            <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>City Marathons</Text>
+                <ScrollView
+                    horizontal
+                    pagingEnabled={false}
+                    showsHorizontalScrollIndicator={false}
+                    decelerationRate="fast"
+                    snapToInterval={CARD_WIDTH + CARD_SPACING}
+                    snapToAlignment="start"
+                    contentContainerStyle={styles.scrollContent}
+                >
+                    {CITY_MARATHONS.map((trail, index) => renderTrailCard(trail, index, true))}
+                </ScrollView>
+            </View>
+
             {/* Coming Soon Message */}
             <View style={styles.comingSoonContainer}>
                 <Text style={[styles.comingSoonText, { color: '#000000' }]}>
@@ -128,8 +211,14 @@ export default function TrailsScreen() {
 
             {/* Footer */}
             <View style={styles.footer}>
-                <Text style={[styles.footerText, { color: theme.textTertiary }]}>Swipe to explore • {INDIAN_TRAILS.length} trails total</Text>
+                <Text style={[styles.footerText, { color: theme.textTertiary }]}>Swipe to explore • {INDIAN_TRAILS.length + CLASSIC_MARATHONS.length + CITY_MARATHONS.length} trails total</Text>
             </View>
+
+            <GoalPromptModal
+                visible={modalVisible}
+                onCancel={handleModalCancel}
+                onStart={handleModalStart}
+            />
         </ScrollView>
     );
 }

@@ -15,12 +15,13 @@ import { getDistanceValue, getDistanceUnit } from '../../src/utils/conversion';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MapPin, Footprints, Flame, Award, Mountain, ChevronRight, Target } from 'lucide-react-native';
 import { useTheme, usePreferences } from '../../src/context/PreferencesContext';
-import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
 import { ProgressBar } from '../../src/components/ProgressBar';
 import { WeeklyActivityChart } from '../../src/components/WeeklyActivityChart';
 import { NextLandmarkCard } from '../../src/components/NextLandmarkCard';
 import { StepService } from '../../src/services/StepService';
+import { GoalPromptModal } from '../../src/components/GoalPromptModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PLACEHOLDER_IMG = { uri: 'https://via.placeholder.com/400x300' };
@@ -35,16 +36,21 @@ export default function HomeScreen() {
     const router = useRouter();
     const [todaySteps, setTodaySteps] = useState(0);
     const [weeklyHistory, setWeeklyHistory] = useState<{ date: string; steps: number }[]>([]);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [selectedTrailIdForModal, setSelectedTrailIdForModal] = useState<string | null>(null);
 
-    useEffect(() => {
-        const loadStats = async () => {
-            const steps = await StepService.getTodaySteps();
-            setTodaySteps(steps);
-            const history = await StepService.getDailyHistory(7);
-            setWeeklyHistory(history);
-        };
-        loadStats();
-    }, []);
+    // Refresh step data when the screen gains focus
+    useFocusEffect(
+        useCallback(() => {
+            const loadStats = async () => {
+                const steps = await StepService.getTodaySteps();
+                setTodaySteps(steps);
+                const history = await StepService.getDailyHistory(7);
+                setWeeklyHistory(history);
+            };
+            loadStats();
+        }, [])
+    );
 
     if (progress === null) return null;
 
@@ -63,25 +69,43 @@ export default function HomeScreen() {
 
     // Handler for quick start from trail card
     const handleQuickStart = (trailId: string) => {
-        Alert.prompt(
-            'Set Your Goal',
-            'How many days would you like to complete this trail?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Start',
-                    onPress: (days?: string) => {
-                        const numDays = parseInt(days || '7', 10);
-                        if (numDays > 0) {
-                            selectTrail(trailId, numDays);
-                            router.push('/(tabs)/progress');
+        // Check if there's an active trail and user is selecting a different one
+        if (progress?.selectedTrailId && progress.selectedTrailId !== trailId) {
+            Alert.alert(
+                '⚠️ Switch Trail?',
+                'Switching trails will reset your progress. You will lose all historical data and only today\'s steps will count towards the new trail.\n\nAre you sure you want to switch?',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Switch Trail',
+                        style: 'destructive',
+                        onPress: () => {
+                            setSelectedTrailIdForModal(trailId);
+                            setModalVisible(true);
                         }
                     }
-                }
-            ],
-            'plain-text',
-            '7'
-        );
+                ]
+            );
+        } else {
+            setSelectedTrailIdForModal(trailId);
+            setModalVisible(true);
+        }
+    };
+
+    const handleModalStart = (days: string) => {
+        const numDays = parseInt(days || '7', 10);
+        if (numDays > 0 && selectedTrailIdForModal) {
+            selectTrail(selectedTrailIdForModal, numDays);
+            setModalVisible(false);
+            router.push('/(tabs)/progress');
+        } else {
+            setModalVisible(false);
+        }
+    };
+
+    const handleModalCancel = () => {
+        setModalVisible(false);
+        setSelectedTrailIdForModal(null);
     };
 
     return (
@@ -225,10 +249,10 @@ export default function HomeScreen() {
                 )}
             </View>
 
-            {/* Your Accomplishments */}
+            {/* My Dashboard */}
             <View style={{ paddingHorizontal: 24, marginBottom: 12 }}>
                 <Text style={[styles.sectionTitle, { color: theme.text, paddingHorizontal: 0, marginBottom: 0 }]}>
-                    Your Accomplishments
+                    My Dashboard
                 </Text>
             </View>
 
@@ -239,38 +263,31 @@ export default function HomeScreen() {
                 activeOpacity={0.8}
             >
                 <View style={styles.statsRow}>
-                    {/* Distance */}
-                    <View style={[styles.statItem, { backgroundColor: theme.backgroundTertiary }]}>
-                        <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                            <MapPin size={20} color="#10B981" />
-                        </View>
-                        <View>
-                            <Text style={[styles.statValue, { color: theme.text }]}>{distanceValue.toFixed(1)}</Text>
-                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{distanceUnit}</Text>
-                        </View>
-                    </View>
-
-                    {/* Steps */}
+                    {/* Lifetime Steps */}
                     <View style={[styles.statItem, { backgroundColor: theme.backgroundTertiary }]}>
                         <View style={[styles.statIcon, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
                             <Footprints size={20} color="#3B82F6" />
                         </View>
                         <View>
                             <Text style={[styles.statValue, { color: theme.text }]}>
-                                {totalSteps >= 1000 ? `${(totalSteps / 1000).toFixed(1)}k` : totalSteps}
+                                {progress.stats?.totalStepsLifetime >= 1000
+                                    ? `${(progress.stats.totalStepsLifetime / 1000).toFixed(1)}k`
+                                    : progress.stats?.totalStepsLifetime || 0}
                             </Text>
                             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Steps</Text>
                         </View>
                     </View>
 
-                    {/* Streak */}
+                    {/* Lifetime Distance */}
                     <View style={[styles.statItem, { backgroundColor: theme.backgroundTertiary }]}>
-                        <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
-                            <Flame size={20} color="#EF4444" />
+                        <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                            <MapPin size={20} color="#10B981" />
                         </View>
                         <View>
-                            <Text style={[styles.statValue, { color: theme.text }]}>{currentStreak}</Text>
-                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Streak</Text>
+                            <Text style={[styles.statValue, { color: theme.text }]}>
+                                {getDistanceValue(progress.stats?.totalDistanceMetersLifetime || 0, preferences.distanceUnit).toFixed(1)}
+                            </Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{distanceUnit}</Text>
                         </View>
                     </View>
 
@@ -282,6 +299,17 @@ export default function HomeScreen() {
                         <View>
                             <Text style={[styles.statValue, { color: theme.text }]}>{badgeCount}</Text>
                             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Badges</Text>
+                        </View>
+                    </View>
+
+                    {/* Completed Trails */}
+                    <View style={[styles.statItem, { backgroundColor: theme.backgroundTertiary }]}>
+                        <View style={[styles.statIcon, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
+                            <Mountain size={20} color="#8B5CF6" />
+                        </View>
+                        <View>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{progress.stats?.completedTrailsCount || 0}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Trails</Text>
                         </View>
                     </View>
                 </View>
@@ -349,15 +377,17 @@ export default function HomeScreen() {
                                     </View>
                                 </View>
 
-                                <TouchableOpacity
-                                    style={[styles.quickStartButton, { backgroundColor: trail.color }]}
-                                    onPress={(e) => {
-                                        e.stopPropagation();
-                                        handleQuickStart(trail.id);
-                                    }}
-                                >
-                                    <Text style={styles.quickStartText}>Start Trail</Text>
-                                </TouchableOpacity>
+                                {progress.selectedTrailId !== trail.id && (
+                                    <TouchableOpacity
+                                        style={[styles.quickStartButton, { backgroundColor: trail.color }]}
+                                        onPress={(e) => {
+                                            e.stopPropagation();
+                                            handleQuickStart(trail.id);
+                                        }}
+                                    >
+                                        <Text style={styles.quickStartText}>Start Trail</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         </TouchableOpacity>
                     ))}
@@ -414,6 +444,12 @@ export default function HomeScreen() {
 
             {/* Bottom Padding */}
             <View style={{ height: 40 }} />
+
+            <GoalPromptModal
+                visible={modalVisible}
+                onCancel={handleModalCancel}
+                onStart={handleModalStart}
+            />
         </ScrollView>
     );
 }

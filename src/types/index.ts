@@ -46,14 +46,23 @@ export interface CompletedTrail {
   maxStepsInOneDay: number;
 }
 
+export interface UserStats {
+  totalStepsLifetime: number;
+  totalDistanceMetersLifetime: number;
+  completedTrailsCount: number;
+}
+
 export interface UserProgress {
   selectedTrailId: string | null;
   trailStartDate: string | null; // ISO Date
   targetDays: number; // User set goal
 
-  // Progress tracking
-  totalStepsValid: number; // Total steps counted towards this trail
+  // Trail Progress tracking (resets per trail)
+  totalStepsValid: number;
   currentDistanceMeters: number;
+
+  // Global Stats (Lifetime)
+  stats: UserStats;
 
   // Last sync info
   lastSyncTime: string; // ISO Date String
@@ -62,7 +71,7 @@ export interface UserProgress {
   unlockedBadges: string[]; // List of Badge IDs
   completedTrails: CompletedTrail[]; // List of completed Trail stats
   favoriteTrails?: string[]; // List of favorite trail IDs
-  currentStreak: number;
+  currentStreak: number; // Keeping in DB for now, but removing from UI
   lastLogDate: string | null; // YYYY-MM-DD
 }
 

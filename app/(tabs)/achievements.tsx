@@ -9,7 +9,7 @@
  */
 import { View, Text, StyleSheet, ScrollView, FlatList, Dimensions } from 'react-native';
 import { useGame } from '../../src/context/GameContext';
-import { BADGE_COLLECTIONS, Badge, getBadgeDescription, getCollectionDescription } from '../../src/const/badges';
+import { BADGE_COLLECTIONS, Badge } from '../../src/const/badges';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, usePreferences } from '../../src/context/PreferencesContext';
 
@@ -43,7 +43,7 @@ export default function AchievementsScreen() {
                     style={[styles.badgeDesc, { color: isUnlocked ? theme.textSecondary : theme.textTertiary }]}
                     numberOfLines={2}
                 >
-                    {getBadgeDescription(badge, preferences.distanceUnit)}
+                    {badge.description}
                 </Text>
             </View>
         );
@@ -65,7 +65,7 @@ export default function AchievementsScreen() {
                         <Text style={styles.collectionEmoji}>{collection.emoji}</Text>
                         <View style={styles.collectionInfo}>
                             <Text style={[styles.collectionName, { color: theme.text }]}>{collection.name}</Text>
-                            <Text style={[styles.collectionDesc, { color: theme.textSecondary }]}>{getCollectionDescription(collection, preferences.distanceUnit)}</Text>
+                            <Text style={[styles.collectionDesc, { color: theme.textSecondary }]}>{collection.description}</Text>
                         </View>
                     </View>
                     <View style={styles.collectionProgress}>

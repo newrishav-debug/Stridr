@@ -68,6 +68,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 targetDays: 7,
                 totalStepsValid: 0,
                 currentDistanceMeters: 0,
+                stats: {
+                    totalStepsLifetime: 0,
+                    totalDistanceMetersLifetime: 0,
+                    completedTrailsCount: 0
+                },
                 lastSyncTime: new Date().toISOString(),
                 unlockedBadges: [],
                 currentStreak: 0,
@@ -75,6 +80,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 completedTrails: [],
             };
             await StorageService.saveProgress(userId, p);
+        }
+
+        // Migration: Ensure stats object exists for existing users
+        if (!p.stats) {
+            console.log('Migrating: Adding stats object to UserProgress');
+            p.stats = {
+                // Approximate lifetime stats for existing users based on current trail + completed trails
+                totalStepsLifetime: p.totalStepsValid + (p.completedTrails?.reduce((acc: number, t: any) => acc + (t.totalSteps || 0), 0) || 0),
+                totalDistanceMetersLifetime: p.currentDistanceMeters, // This is an under-estimation as we don't store distance in completedTrails explicitly usually
+                completedTrailsCount: p.completedTrails?.length || 0
+            };
         }
 
         if (!p.completedTrails) {
@@ -106,9 +122,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Automatic hourly sync while app is active
     useEffect(() => {
-        if (!user || !progress?.selectedTrailId) return;
+        if (!user) return; // Sync permitted as long as user is logged in, no trail needed
 
-        // Initial sync when component loads with active trail
+        // Initial sync when component loads
         sync();
 
         // Set up hourly sync interval (3600000 ms = 1 hour)
@@ -123,11 +139,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('[GameContext] Cleaning up sync interval');
             clearInterval(syncInterval);
         };
-    }, [user, progress?.selectedTrailId]);
+    }, [user]);
 
     // Sync when app comes to foreground/resumes
     useEffect(() => {
-        if (!user || !progress?.selectedTrailId) return;
+        if (!user) return;
 
         const subscription = AppState.addEventListener('change', (nextAppState) => {
             if (nextAppState === 'active') {
@@ -140,7 +156,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => {
             subscription.remove();
         };
-    }, [user, progress?.selectedTrailId]);
+    }, [user]);
 
     // Helper to check and handle trail completion
     const checkAndCompleteTrail = async (currentProgress: UserProgress): Promise<UserProgress> => {
@@ -179,7 +195,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const permitted = await StepService.requestPermissions();
             if (!permitted) {
-                alert('Permission denied. Please enable motion permissions in settings.');
+                // Silent fail if no permission, or maybe log it
+                console.log('Step permission denied during sync');
                 return;
             }
 
@@ -188,7 +205,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (newSteps > 0) {
                 const addedDistance = stepsToMeters(newSteps);
 
-                // Streak Logic
+                // Streak Logic (Calculating but hiding from UI as requested)
                 const newStreak = StatsService.calculateStreak(progress.currentStreak || 0, progress.lastLogDate, now);
                 const nowString = now.toISOString().split('T')[0];
 
@@ -197,10 +214,20 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const notificationsEnabled = prefs?.notificationsEnabled ?? false;
                 const notifSettings = prefs?.notificationSettings;
 
+                // Update Progress
                 let newProgress: UserProgress = {
                     ...progress,
-                    totalStepsValid: progress.totalStepsValid + newSteps,
-                    currentDistanceMeters: progress.currentDistanceMeters + addedDistance,
+                    // ALWAYS update lifetime stats
+                    stats: {
+                        ...progress.stats,
+                        totalStepsLifetime: (progress.stats?.totalStepsLifetime || 0) + newSteps,
+                        totalDistanceMetersLifetime: (progress.stats?.totalDistanceMetersLifetime || 0) + addedDistance,
+                        completedTrailsCount: progress.completedTrails?.length || 0
+                    },
+                    // ONLY update active trail stats if a trail is selected
+                    totalStepsValid: progress.selectedTrailId ? progress.totalStepsValid + newSteps : progress.totalStepsValid,
+                    currentDistanceMeters: progress.selectedTrailId ? progress.currentDistanceMeters + addedDistance : progress.currentDistanceMeters,
+
                     lastSyncTime: now.toISOString(),
                     currentStreak: newStreak,
                     lastLogDate: nowString,
@@ -208,17 +235,24 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 };
 
                 // Store previous milestone % before update for milestone notifications
-                const currentTrail = progress.selectedTrailId
-                    ? TRAILS.find(t => t.id === progress.selectedTrailId)
+                const currentTrail = newProgress.selectedTrailId
+                    ? TRAILS.find(t => t.id === newProgress.selectedTrailId)
                     : null;
                 const prevPercent = currentTrail
                     ? Math.floor((progress.currentDistanceMeters / currentTrail.totalDistanceMeters) * 100)
                     : 0;
 
-                // Check for Trail Completion
+                // Check for Trail Completion (only if we have an active trail)
                 const wasCompleted = newProgress.selectedTrailId !== null;
-                newProgress = await checkAndCompleteTrail(newProgress);
+                if (currentTrail) {
+                    newProgress = await checkAndCompleteTrail(newProgress);
+                }
                 const isNowCompleted = newProgress.selectedTrailId === null && wasCompleted;
+
+                // If completed, update the completed count in stats
+                if (isNowCompleted) {
+                    newProgress.stats.completedTrailsCount = newProgress.completedTrails.length;
+                }
 
                 // Milestone notification (25%, 50%, 75%, 100%)
                 if (notificationsEnabled && notifSettings?.milestone && currentTrail && !isNowCompleted) {
@@ -249,7 +283,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                 }
 
-                // Check for new badges
+                // Check for new badges (using global stats now ideally)
                 const newBadgeIds = BadgeService.checkNewBadges(newProgress);
                 if (newBadgeIds.length > 0) {
                     newProgress.unlockedBadges = [...(newProgress.unlockedBadges || []), ...newBadgeIds];
@@ -300,6 +334,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             trailStartDate: startOfToday.toISOString(),
             totalStepsValid: 0,
             currentDistanceMeters: 0,
+            // Preserve global stats
+            stats: progress?.stats || {
+                totalStepsLifetime: 0,
+                totalDistanceMetersLifetime: 0,
+                completedTrailsCount: 0
+            },
             lastSyncTime: startOfToday.toISOString(),
             unlockedBadges: progress?.unlockedBadges || [],
             completedTrails: progress?.completedTrails || [],
@@ -366,6 +406,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         targetDays: 0,
                         totalStepsValid: 0,
                         currentDistanceMeters: 0,
+                        // Reset stats too? Or keep lifetime? Usually "Reset Progress" implies everything.
+                        // But since user wants Global Stats to be persistent, let's keep them zeroed only if explicitly requested.
+                        // For now, let's assume resetProgress is a full hard reset (debug tool).
+                        stats: {
+                            totalStepsLifetime: 0,
+                            totalDistanceMetersLifetime: 0,
+                            completedTrailsCount: 0
+                        },
                         lastSyncTime: new Date().toISOString(),
                         unlockedBadges: [],
                         completedTrails: [],

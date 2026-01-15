@@ -7,14 +7,13 @@
  * Modification History:
  * 2024-01-12: Added badge collections.
  * 2024-01-12: Added dynamic distance unit support for badge descriptions.
+ * 2026-01-14: Simplified to use only kilometers for distance badges.
  */
-import { formatBadgeDistance } from '../utils/conversion';
 
 export interface Badge {
     id: string;
     name: string;
-    description: string; // Static description (used as fallback)
-    descriptionTemplate?: (unit: 'km' | 'mi') => string; // Dynamic description for distance badges
+    description: string;
     icon: string;
     conditionType: 'TOTAL_STEPS' | 'TOTAL_DISTANCE' | 'STREAK' | 'TRAIL_COMPLETE' | 'SEASON' | 'MONTH';
     conditionValue: number;
@@ -25,25 +24,8 @@ export interface BadgeCollection {
     id: string;
     name: string;
     description: string;
-    descriptionTemplate?: (unit: 'km' | 'mi') => string; // Dynamic description for collection
     emoji: string;
     badges: Badge[];
-}
-
-// Helper to get badge description based on distance unit preference
-export function getBadgeDescription(badge: Badge, unit: 'km' | 'mi' = 'km'): string {
-    if (badge.descriptionTemplate) {
-        return badge.descriptionTemplate(unit);
-    }
-    return badge.description;
-}
-
-// Helper to get collection description based on distance unit preference
-export function getCollectionDescription(collection: BadgeCollection, unit: 'km' | 'mi' = 'km'): string {
-    if (collection.descriptionTemplate) {
-        return collection.descriptionTemplate(unit);
-    }
-    return collection.description;
 }
 
 // === BADGE DEFINITIONS ===
@@ -60,16 +42,16 @@ const allBadges: Badge[] = [
     { id: 'warrior-9', name: 'Walking God', description: '1,000,000 steps - Legendary!', icon: '👑', conditionType: 'TOTAL_STEPS', conditionValue: 1000000, collection: 'warrior' },
 
     // DISTANCE DESTROYER COLLECTION
-    { id: 'distance-1', name: 'Distance Rookie', description: 'Covered 1 kilometer', descriptionTemplate: (unit) => `Covered ${formatBadgeDistance(1000, unit)}`, icon: '📏', conditionType: 'TOTAL_DISTANCE', conditionValue: 1000, collection: 'distance' },
-    { id: 'distance-2', name: '5K Crusher', description: '5 kilometers in the bag', descriptionTemplate: (unit) => `${formatBadgeDistance(5000, unit)} in the bag`, icon: '🏃', conditionType: 'TOTAL_DISTANCE', conditionValue: 5000, collection: 'distance' },
-    { id: 'distance-3', name: 'Double Digit', description: '10 kilometers traveled', descriptionTemplate: (unit) => `${formatBadgeDistance(10000, unit)} traveled`, icon: '📍', conditionType: 'TOTAL_DISTANCE', conditionValue: 10000, collection: 'distance' },
-    { id: 'distance-4', name: 'Half Marathon Hero', description: '21km - halfway there!', descriptionTemplate: (unit) => `${formatBadgeDistance(21000, unit)} - halfway there!`, icon: '🎖️', conditionType: 'TOTAL_DISTANCE', conditionValue: 21000, collection: 'distance' },
-    { id: 'distance-5', name: 'Marathon Maniac', description: '42km of pure determination', descriptionTemplate: (unit) => `${formatBadgeDistance(42000, unit)} of pure determination`, icon: '🏁', conditionType: 'TOTAL_DISTANCE', conditionValue: 42000, collection: 'distance' },
-    { id: 'distance-6', name: 'Ultra Beast', description: '50km - beyond limits', descriptionTemplate: (unit) => `${formatBadgeDistance(50000, unit)} - beyond limits`, icon: '🦅', conditionType: 'TOTAL_DISTANCE', conditionValue: 50000, collection: 'distance' },
-    { id: 'distance-7', name: 'Century Seeker', description: '100km journey complete', descriptionTemplate: (unit) => `${formatBadgeDistance(100000, unit)} journey complete`, icon: '🚀', conditionType: 'TOTAL_DISTANCE', conditionValue: 100000, collection: 'distance' },
-    { id: 'distance-8', name: 'Distance King', description: '250km conquered', descriptionTemplate: (unit) => `${formatBadgeDistance(250000, unit)} conquered`, icon: '🌍', conditionType: 'TOTAL_DISTANCE', conditionValue: 250000, collection: 'distance' },
-    { id: 'distance-9', name: 'Distance Demon', description: '500km - unstoppable!', descriptionTemplate: (unit) => `${formatBadgeDistance(500000, unit)} - unstoppable!`, icon: '👹', conditionType: 'TOTAL_DISTANCE', conditionValue: 500000, collection: 'distance' },
-    { id: 'distance-10', name: 'The Wanderer', description: '1,000km of exploration', descriptionTemplate: (unit) => `${formatBadgeDistance(1000000, unit)} of exploration`, icon: '🗺️', conditionType: 'TOTAL_DISTANCE', conditionValue: 1000000, collection: 'distance' },
+    { id: 'distance-1', name: 'Distance Rookie', description: 'Covered 1 km', icon: '📏', conditionType: 'TOTAL_DISTANCE', conditionValue: 1000, collection: 'distance' },
+    { id: 'distance-2', name: '5K Crusher', description: '5 km in the bag', icon: '🏃', conditionType: 'TOTAL_DISTANCE', conditionValue: 5000, collection: 'distance' },
+    { id: 'distance-3', name: 'Double Digit', description: '10 km traveled', icon: '📍', conditionType: 'TOTAL_DISTANCE', conditionValue: 10000, collection: 'distance' },
+    { id: 'distance-4', name: 'Half Marathon Hero', description: '21 km - halfway there!', icon: '🎖️', conditionType: 'TOTAL_DISTANCE', conditionValue: 21000, collection: 'distance' },
+    { id: 'distance-5', name: 'Marathon Maniac', description: '42 km of pure determination', icon: '🏁', conditionType: 'TOTAL_DISTANCE', conditionValue: 42000, collection: 'distance' },
+    { id: 'distance-6', name: 'Ultra Beast', description: '50 km - beyond limits', icon: '🦅', conditionType: 'TOTAL_DISTANCE', conditionValue: 50000, collection: 'distance' },
+    { id: 'distance-7', name: 'Century Seeker', description: '100 km journey complete', icon: '🚀', conditionType: 'TOTAL_DISTANCE', conditionValue: 100000, collection: 'distance' },
+    { id: 'distance-8', name: 'Distance King', description: '250 km conquered', icon: '🌍', conditionType: 'TOTAL_DISTANCE', conditionValue: 250000, collection: 'distance' },
+    { id: 'distance-9', name: 'Distance Demon', description: '500 km - unstoppable!', icon: '👹', conditionType: 'TOTAL_DISTANCE', conditionValue: 500000, collection: 'distance' },
+    { id: 'distance-10', name: 'The Wanderer', description: '1,000 km of exploration', icon: '🗺️', conditionType: 'TOTAL_DISTANCE', conditionValue: 1000000, collection: 'distance' },
 
 
     // SEASONAL WANDERER COLLECTION
@@ -114,7 +96,6 @@ export const BADGE_COLLECTIONS: BadgeCollection[] = [
         id: 'distance',
         name: 'Distance Destroyers',
         description: 'Kilometer conquests',
-        descriptionTemplate: (unit) => unit === 'mi' ? 'Mile conquests' : 'Kilometer conquests',
         emoji: '🗺️',
         badges: allBadges.filter(b => b.collection === 'distance')
     },
