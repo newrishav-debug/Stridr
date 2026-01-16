@@ -82,6 +82,19 @@ export const MONTH_NAMES = [
 export const MONTH_ICONS = ['🎆', '💝', '☘️', '🌷', '🌺', '🌻', '🎇', '🌞', '🍁', '🎃', '🦃', '🎄'];
 
 // ============================================
+// MONTHLY MASTER BADGES (12 badges - calendar year)
+// ============================================
+export const MONTHLY_MASTER_BADGES: Badge[] = MONTH_NAMES.map((month, index) => ({
+    id: `master-${index + 1}`,
+    name: `${month} Master`,
+    description: `Earn Monthly Master in ${month}`,
+    icon: MONTH_ICONS[index],
+    conditionType: 'MONTHLY_MASTER',
+    conditionValue: index + 1, // 1 for Jan, 2 for Feb, etc.
+    collection: 'monthly'
+}));
+
+// ============================================
 // COLLECTIONS FOR UI DISPLAY
 // ============================================
 export const BADGE_COLLECTIONS: BadgeCollection[] = [
@@ -106,6 +119,13 @@ export const BADGE_COLLECTIONS: BadgeCollection[] = [
         emoji: '🏔️',
         badges: TRAIL_BADGES
     },
+    {
+        id: 'monthly',
+        name: 'Calendar Masters',
+        description: 'Collect all 12 monthly masters',
+        emoji: '📅',
+        badges: MONTHLY_MASTER_BADGES
+    }
 ];
 
 // All monthly badges combined (for counting towards monthly master)

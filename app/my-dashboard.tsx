@@ -61,6 +61,17 @@ export default function MyDashboardScreen() {
     // Monthly badge progress
     const monthlyProgress = progress?.monthlyProgress;
     const monthlyUnlockedCount = monthlyProgress?.unlockedBadgeIds.length || 0;
+
+    // Calculate TOTAL lifetime badges
+    const pastMonthsCount = (progress?.pastMonths || []).reduce((acc, pm) => acc + pm.unlockedBadgeIds.length, 0);
+    const trailBadgesCount = (progress?.trailBadges || []).length;
+    // Count master badges from past years/months
+    const masterBadgesCount = (progress?.yearlyProgress || []).reduce((acc, yp) => acc + yp.monthlyBadgesEarned.length + (yp.yearlyBadgeEarned ? 1 : 0), 0);
+
+    // Total badges = Current Month + Past Months Specifics (if we count them singly) + Trail + Masters
+    // Note: Past months specific badges are now archived, so we count them!
+    const totalBadgesEarned = monthlyUnlockedCount + pastMonthsCount + trailBadgesCount + masterBadgesCount;
+
     const badgesRemaining = Math.max(0, MONTHLY_MASTER_REQUIREMENT - monthlyUnlockedCount);
     const currentMonth = new Date().getMonth() + 1;
     const monthName = MONTH_NAMES[currentMonth - 1];
@@ -390,13 +401,16 @@ export default function MyDashboardScreen() {
                             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Distance</Text>
                         </View>
 
-                        <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                        <TouchableOpacity
+                            style={[styles.statCard, { backgroundColor: theme.card }]}
+                            onPress={() => router.push({ pathname: '/(tabs)/achievements', params: { view: 'history' } })}
+                        >
                             <View style={[styles.statIcon, { backgroundColor: '#F59E0B' }]}>
                                 <Award size={24} color="white" />
                             </View>
-                            <Text style={[styles.statValue, { color: theme.text }]}>{monthlyUnlockedCount}/{MONTHLY_BADGES_TOTAL}</Text>
-                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Badges</Text>
-                        </View>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{totalBadgesEarned}</Text>
+                            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Badges</Text>
+                        </TouchableOpacity>
 
                         <View style={[styles.statCard, { backgroundColor: theme.card }]}>
                             <View style={[styles.statIcon, { backgroundColor: '#EC4899' }]}>

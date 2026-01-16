@@ -8,14 +8,17 @@
  * 2024-01-12: Documentation added.
  * 2026-01-15: Complete revamp for monthly recurring badge system.
  */
-import { View, Text, StyleSheet, ScrollView, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, FlatList, Dimensions, TouchableOpacity, Modal } from 'react-native';
 import { useGame } from '../../src/context/GameContext';
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import {
     BADGE_COLLECTIONS,
     Badge,
     MONTHLY_STEP_BADGES,
     MONTHLY_DISTANCE_BADGES,
     TRAIL_BADGES,
+    MONTHLY_MASTER_BADGES,
     MONTHLY_BADGES_TOTAL,
     MONTHLY_MASTER_REQUIREMENT,
     MONTH_NAMES,
@@ -24,7 +27,9 @@ import {
 import { BadgeService } from '../../src/services/BadgeService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../src/context/PreferencesContext';
-import { Award, Target, MapPin, Trophy, Lock } from 'lucide-react-native';
+import { Award, Target, MapPin, Trophy, Lock, History, ChevronLeft, Calendar } from 'lucide-react-native';
+import { useState } from 'react';
+import { MonthlyProgress } from '../../src/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BADGE_CARD_WIDTH = 140;
@@ -32,25 +37,37 @@ const BADGE_CARD_WIDTH = 140;
 export default function AchievementsScreen() {
     const { progress } = useGame();
     const theme = useTheme();
+    const params = useLocalSearchParams();
+    const [viewingHistory, setViewingHistory] = useState(false);
+    const [selectedHistoryMonth, setSelectedHistoryMonth] = useState<MonthlyProgress | null>(null);
 
-    const monthlyProgress = progress?.monthlyProgress;
+    useEffect(() => {
+        if (params.view === 'history') {
+            setViewingHistory(true);
+        }
+    }, [params.view]);
+
+    const currentMonthlyProgress = progress?.monthlyProgress;
     const yearlyProgress = progress?.yearlyProgress || [];
     const trailBadges = progress?.trailBadges || [];
+    const pastMonths = progress?.pastMonths || [];
 
-    // Current month info
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    const monthName = MONTH_NAMES[currentMonth - 1];
-    const monthIcon = MONTH_ICONS[currentMonth - 1];
+    // Determine which month data to show
+    const activeProgress = selectedHistoryMonth || currentMonthlyProgress;
 
-    // Monthly badge counts
-    const monthlyUnlockedCount = monthlyProgress?.unlockedBadgeIds.length || 0;
+    // Active month info
+    const activeYear = activeProgress?.year || new Date().getFullYear();
+    const activeMonthIndex = (activeProgress?.month || (new Date().getMonth() + 1)) - 1;
+    const activeMonthName = MONTH_NAMES[activeMonthIndex];
+    const activeMonthIcon = MONTH_ICONS[activeMonthIndex];
+
+    // Badge stats for active view
+    const monthlyUnlockedCount = activeProgress?.unlockedBadgeIds.length || 0;
     const badgesRemaining = Math.max(0, MONTHLY_MASTER_REQUIREMENT - monthlyUnlockedCount);
-    const monthlyMasterEarned = monthlyProgress?.monthlyBadgeEarned || false;
+    const monthlyMasterEarned = activeProgress?.monthlyBadgeEarned || false;
 
-    // Get current year progress
-    const currentYearProgress = yearlyProgress.find(yp => yp.year === currentYear);
+    // Current year progress (kept for context, but mainly for current view)
+    const currentYearProgress = yearlyProgress.find(yp => yp.year === activeYear);
     const monthlyBadgesEarnedThisYear = currentYearProgress?.monthlyBadgesEarned.length || 0;
     const yearlyChampionEarned = currentYearProgress?.yearlyBadgeEarned || false;
 
@@ -75,7 +92,7 @@ export default function AchievementsScreen() {
                     style={[styles.badgeDesc, { color: isUnlocked ? theme.textSecondary : theme.textTertiary }]}
                     numberOfLines={2}
                 >
-                    {badge.description.replace('this month', `in ${monthName}`)}
+                    {badge.description.replace('this month', `in ${activeMonthName}`)}
                 </Text>
                 {progressPercent !== undefined && !isUnlocked && (
                     <View style={styles.badgeProgressBar}>
@@ -91,10 +108,10 @@ export default function AchievementsScreen() {
 
 
     const renderMonthlyCollection = (title: string, emoji: string, badges: Badge[], type: 'steps' | 'distance') => {
-        const unlockedIds = new Set(monthlyProgress?.unlockedBadgeIds || []);
+        const unlockedIds = new Set(activeProgress?.unlockedBadgeIds || []);
         const currentValue = type === 'steps'
-            ? (monthlyProgress?.stepsThisMonth || 0)
-            : (monthlyProgress?.distanceMetersThisMonth || 0);
+            ? (activeProgress?.stepsThisMonth || 0)
+            : (activeProgress?.distanceMetersThisMonth || 0);
 
         return (
             <View style={styles.collectionContainer}>
@@ -105,8 +122,8 @@ export default function AchievementsScreen() {
                             <Text style={[styles.collectionName, { color: theme.text }]}>{title}</Text>
                             <Text style={[styles.collectionDesc, { color: theme.textSecondary }]}>
                                 {type === 'steps'
-                                    ? `${(currentValue).toLocaleString()} steps this month`
-                                    : `${(currentValue / 1000).toFixed(1)} km this month`
+                                    ? `${(currentValue).toLocaleString()} steps in ${activeMonthName}`
+                                    : `${(currentValue / 1000).toFixed(1)} km in ${activeMonthName}`
                                 }
                             </Text>
                         </View>
@@ -148,7 +165,7 @@ export default function AchievementsScreen() {
                         <View style={styles.collectionInfo}>
                             <Text style={[styles.collectionName, { color: theme.text }]}>Trail Blazers</Text>
                             <Text style={[styles.collectionDesc, { color: theme.textSecondary }]}>
-                                {completedCount} trails completed
+                                {completedCount} trails completed (Lifetime)
                             </Text>
                         </View>
                     </View>
@@ -173,6 +190,110 @@ export default function AchievementsScreen() {
         );
     };
 
+    const renderCalendarMasters = () => {
+        const earnedMonths = new Set(currentYearProgress?.monthlyBadgesEarned || []);
+
+        return (
+            <View style={styles.collectionContainer}>
+                <View style={styles.collectionHeader}>
+                    <View style={styles.collectionTitleRow}>
+                        <Text style={styles.collectionEmoji}>📅</Text>
+                        <View style={styles.collectionInfo}>
+                            <Text style={[styles.collectionName, { color: theme.text }]}>Calendar Masters</Text>
+                            <Text style={[styles.collectionDesc, { color: theme.textSecondary }]}>
+                                {earnedMonths.size} months conquered in {activeYear}
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={[styles.collectionProgress, { backgroundColor: '#8B5CF6' }]}>
+                        <Text style={styles.progressText}>
+                            {earnedMonths.size}/12
+                        </Text>
+                    </View>
+                </View>
+
+                <FlatList
+                    horizontal
+                    data={MONTHLY_MASTER_BADGES}
+                    renderItem={({ item }) => {
+                        // For MONTHLY_MASTER badges, conditionValue is the month number (1-12)
+                        const isUnlocked = earnedMonths.has(item.conditionValue);
+                        return renderBadge(item, isUnlocked);
+                    }}
+                    keyExtractor={(item) => item.id}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.carouselContent}
+                    snapToInterval={BADGE_CARD_WIDTH + 12}
+                    decelerationRate="fast"
+                />
+            </View>
+        );
+    };
+
+    const renderHistoryList = () => {
+        return (
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
+                <View style={[styles.headerGradient, { backgroundColor: theme.card, paddingTop: 60 }]}>
+                    <View style={styles.headerTop}>
+                        <TouchableOpacity onPress={() => setViewingHistory(false)} style={styles.backButton}>
+                            <ChevronLeft size={28} color={theme.text} />
+                        </TouchableOpacity>
+                        <Text style={[styles.title, { color: theme.text, fontSize: 24 }]}>Badge History</Text>
+                    </View>
+                    <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+                        Select a past month to view your achievements
+                    </Text>
+                </View>
+
+                <ScrollView style={styles.collectionsScroll} contentContainerStyle={{ padding: 20 }}>
+                    {pastMonths.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={{ fontSize: 40, marginBottom: 10 }}>🕸️</Text>
+                            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                                No history available yet.
+                            </Text>
+                            <Text style={[styles.emptySubText, { color: theme.textTertiary }]}>
+                                Your monthly badges will be archived here starting next month!
+                            </Text>
+                        </View>
+                    ) : (
+                        pastMonths.slice().reverse().map((pm, index) => (
+                            <TouchableOpacity
+                                key={`${pm.year}-${pm.month}`}
+                                style={[styles.historyCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+                                onPress={() => setSelectedHistoryMonth(pm)}
+                            >
+                                <View style={styles.historyCardLeft}>
+                                    <Text style={styles.historyIcon}>{MONTH_ICONS[pm.month - 1]}</Text>
+                                    <View>
+                                        <Text style={[styles.historyTitle, { color: theme.text }]}>
+                                            {MONTH_NAMES[pm.month - 1]} {pm.year}
+                                        </Text>
+                                        <Text style={[styles.historySubtitle, { color: theme.textSecondary }]}>
+                                            {pm.monthlyBadgeEarned ? '🏆 Monthly Master Earned' : `${pm.unlockedBadgeIds.length} badges unlocked`}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={styles.historyStats}>
+                                    <View style={styles.statTag}>
+                                        <Text style={[styles.statValue, { color: theme.text }]}>
+                                            {(pm.stepsThisMonth / 1000).toFixed(1)}k
+                                        </Text>
+                                        <Text style={[styles.statLabel, { color: theme.textTertiary }]}>steps</Text>
+                                    </View>
+                                </View>
+                            </TouchableOpacity>
+                        ))
+                    )}
+                </ScrollView>
+            </View>
+        );
+    };
+
+    if (viewingHistory && !selectedHistoryMonth) {
+        return renderHistoryList();
+    }
+
     return (
         <View style={[styles.container, { backgroundColor: theme.background }]}>
             {/* Header with Monthly Progress */}
@@ -180,9 +301,27 @@ export default function AchievementsScreen() {
                 colors={monthlyMasterEarned ? ['#10B981', '#059669'] : ['#F59E0B', '#D97706']}
                 style={styles.headerGradient}
             >
-                <View style={styles.headerTop}>
-                    <Text style={styles.monthIcon}>{monthIcon}</Text>
-                    <Text style={styles.title}>{monthName} Challenge</Text>
+                <View style={styles.headerTopRow}>
+                    <TouchableOpacity
+                        style={styles.headerTop}
+                        activeOpacity={1}
+                        onPress={selectedHistoryMonth ? () => setSelectedHistoryMonth(null) : undefined}
+                    >
+                        {selectedHistoryMonth && (
+                            <ChevronLeft size={28} color="white" style={{ marginRight: 8 }} />
+                        )}
+                        <Text style={styles.monthIcon}>{activeMonthIcon}</Text>
+                        <Text style={styles.title}>{activeMonthName} {activeYear}</Text>
+                    </TouchableOpacity>
+
+                    {!selectedHistoryMonth && (
+                        <TouchableOpacity
+                            style={styles.historyButton}
+                            onPress={() => setViewingHistory(true)}
+                        >
+                            <History size={24} color="white" />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {monthlyMasterEarned ? (
@@ -214,13 +353,21 @@ export default function AchievementsScreen() {
                     </>
                 )}
 
-                {/* Yearly Progress */}
+                {/* Yearly Progress or Context Text */}
                 <View style={styles.yearlySection}>
-                    <Text style={styles.yearlyTitle}>
-                        {currentYear} Champion: {monthlyBadgesEarnedThisYear}/12 months
-                    </Text>
-                    {yearlyChampionEarned && (
-                        <Text style={styles.yearlyChampionText}>🏆 Champion!</Text>
+                    {selectedHistoryMonth ? (
+                        <Text style={styles.yearlyTitle}>
+                            Viewing Archived History
+                        </Text>
+                    ) : (
+                        <>
+                            <Text style={styles.yearlyTitle}>
+                                {activeYear} Champion: {monthlyBadgesEarnedThisYear}/12 months
+                            </Text>
+                            {yearlyChampionEarned && (
+                                <Text style={styles.yearlyChampionText}>🏆 Champion!</Text>
+                            )}
+                        </>
                     )}
                 </View>
             </LinearGradient>
@@ -229,7 +376,8 @@ export default function AchievementsScreen() {
             <ScrollView style={styles.collectionsScroll} showsVerticalScrollIndicator={false}>
                 {renderMonthlyCollection('Walking Warriors', '⚔️', MONTHLY_STEP_BADGES, 'steps')}
                 {renderMonthlyCollection('Distance Destroyers', '🗺️', MONTHLY_DISTANCE_BADGES, 'distance')}
-                {renderTrailBadges()}
+                {!selectedHistoryMonth && renderTrailBadges()}
+                {!selectedHistoryMonth && renderCalendarMasters()}
                 <View style={{ height: 40 }} />
             </ScrollView>
         </View>
@@ -425,6 +573,75 @@ const styles = StyleSheet.create({
         color: '#10B981',
         fontWeight: '600',
         marginTop: 4,
+    },
+    headerTopRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    historyButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    backButton: {
+        marginRight: 16,
+    },
+    emptyState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 80,
+    },
+    emptyText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginTop: 8,
+    },
+    emptySubText: {
+        textAlign: 'center',
+        marginTop: 8,
+        paddingHorizontal: 40,
+    },
+    historyCard: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+    },
+    historyCardLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    historyIcon: {
+        fontSize: 32,
+    },
+    historyTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    historySubtitle: {
+        fontSize: 13,
+    },
+    historyStats: {
+        alignItems: 'flex-end',
+    },
+    statTag: {
+        alignItems: 'flex-end',
+    },
+    statValue: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    statLabel: {
+        fontSize: 10,
     },
 });
 

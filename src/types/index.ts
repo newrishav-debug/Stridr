@@ -100,6 +100,9 @@ export interface UserProgress {
   completedTrails: CompletedTrail[]; // List of completed Trail stats
   favoriteTrails?: string[]; // List of favorite trail IDs
 
+  // Monthly Badge History
+  pastMonths?: MonthlyProgress[]; // Archive of previous months
+
   // Legacy fields (kept for compatibility)
   currentStreak: number;
   lastLogDate: string | null; // YYYY-MM-DD

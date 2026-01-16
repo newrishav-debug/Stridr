@@ -43,16 +43,19 @@ const GameContext = createContext<GameContextType>({} as GameContextType);
 /**
  * Helper: Check if we need to reset monthly progress (new month started)
  */
-const checkAndResetMonthlyProgress = (currentProgress: MonthlyProgress | undefined, now: Date): MonthlyProgress => {
+const checkAndResetMonthlyProgress = (currentProgress: MonthlyProgress | undefined, now: Date): { newCurrent: MonthlyProgress, toArchive: MonthlyProgress | null } => {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1; // 1-12
 
     if (!currentProgress || currentProgress.year !== currentYear || currentProgress.month !== currentMonth) {
         console.log(`[GameContext] New month detected: ${currentMonth}/${currentYear}. Resetting monthly progress.`);
-        return BadgeService.createNewMonthlyProgress(currentYear, currentMonth);
+        return {
+            newCurrent: BadgeService.createNewMonthlyProgress(currentYear, currentMonth),
+            toArchive: currentProgress || null
+        };
     }
 
-    return currentProgress;
+    return { newCurrent: currentProgress, toArchive: null };
 };
 
 /**
@@ -73,6 +76,7 @@ const createDefaultProgress = (): UserProgress => {
         },
         lastSyncTime: now.toISOString(),
         monthlyProgress: BadgeService.createNewMonthlyProgress(now.getFullYear(), now.getMonth() + 1),
+        pastMonths: [],
         yearlyProgress: [],
         trailBadges: [],
         completedTrails: [],
@@ -151,8 +155,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }));
         }
 
+        // Migration: Initialize pastMonths if missing
+        if (!p.pastMonths) {
+            p.pastMonths = [];
+        }
+
         // Check if month has changed and reset monthly progress
-        p.monthlyProgress = checkAndResetMonthlyProgress(p.monthlyProgress, now);
+        const { newCurrent, toArchive } = checkAndResetMonthlyProgress(p.monthlyProgress, now);
+        p.monthlyProgress = newCurrent;
+        if (toArchive) {
+            p.pastMonths = [...(p.pastMonths || []), toArchive];
+        }
 
         setProgress(p);
 
@@ -270,7 +283,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const notifSettings = prefs?.notificationSettings;
 
                 // Check if month changed and reset monthly progress
-                let monthlyProgress = checkAndResetMonthlyProgress(progress.monthlyProgress, now);
+                const { newCurrent: resetMonthly, toArchive } = checkAndResetMonthlyProgress(progress.monthlyProgress, now);
+                let monthlyProgress = resetMonthly;
+
+                // Handle archiving if month changed during sync
+                let pastMonths = progress.pastMonths || [];
+                if (toArchive) {
+                    pastMonths = [...pastMonths, toArchive];
+                }
 
                 // Update monthly progress
                 monthlyProgress = {
@@ -346,6 +366,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     lastLogDate: nowString,
                     completedTrails: progress.completedTrails || [],
                     monthlyProgress,
+                    pastMonths,
                     yearlyProgress
                 };
 
@@ -413,8 +434,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
             } else {
                 // Even if no steps, check if month changed
-                const monthlyProgress = checkAndResetMonthlyProgress(progress.monthlyProgress, now);
-                const newProgress = { ...progress, lastSyncTime: now.toISOString(), monthlyProgress };
+                const { newCurrent, toArchive } = checkAndResetMonthlyProgress(progress.monthlyProgress, now);
+                let pastMonths = progress.pastMonths || [];
+                if (toArchive) {
+                    pastMonths = [...pastMonths, toArchive];
+                }
+
+                const newProgress = { ...progress, lastSyncTime: now.toISOString(), monthlyProgress: newCurrent, pastMonths };
                 setProgress(newProgress);
                 await StorageService.saveProgress(user.id, newProgress);
             }
@@ -441,6 +467,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             },
             lastSyncTime: startOfToday.toISOString(),
             monthlyProgress: progress?.monthlyProgress || BadgeService.createNewMonthlyProgress(startOfToday.getFullYear(), startOfToday.getMonth() + 1),
+            pastMonths: progress?.pastMonths || [],
             yearlyProgress: progress?.yearlyProgress || [],
             trailBadges: progress?.trailBadges || [],
             completedTrails: progress?.completedTrails || [],
@@ -530,6 +557,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         },
                         lastSyncTime: now.toISOString(),
                         monthlyProgress: BadgeService.createNewMonthlyProgress(now.getFullYear(), now.getMonth() + 1),
+                        pastMonths: [],
                         yearlyProgress: [],
                         trailBadges: [],
                         completedTrails: [],

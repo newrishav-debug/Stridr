@@ -208,5 +208,12 @@ export const BadgeService = {
             };
         }
         return yearProgress;
+    },
+
+    /**
+     * Get specific past month progress from archive
+     */
+    getPastMonthProgress(pastMonths: MonthlyProgress[] | undefined, year: number, month: number): MonthlyProgress | undefined {
+        return pastMonths?.find(pm => pm.year === year && pm.month === month);
     }
 };
