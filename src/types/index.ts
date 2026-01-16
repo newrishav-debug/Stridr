@@ -6,6 +6,7 @@
  *
  * Modification History:
  * 2024-01-12: Added CompletedTrail and DailyLog types.
+ * 2026-01-15: Added MonthlyProgress and YearlyProgress for badge revamp.
  */
 export interface Trail {
   id: string;
@@ -52,6 +53,27 @@ export interface UserStats {
   completedTrailsCount: number;
 }
 
+// ============================================
+// MONTHLY BADGE PROGRESS (resets each month)
+// ============================================
+export interface MonthlyProgress {
+  year: number;
+  month: number; // 1-12
+  stepsThisMonth: number;
+  distanceMetersThisMonth: number;
+  unlockedBadgeIds: string[]; // e.g., ["step-5k", "step-10k", "dist-5k"]
+  monthlyBadgeEarned: boolean; // True if 10/15 badges earned
+}
+
+// ============================================
+// YEARLY BADGE PROGRESS
+// ============================================
+export interface YearlyProgress {
+  year: number;
+  monthlyBadgesEarned: number[]; // Array of months (1-12) where monthly badge was earned
+  yearlyBadgeEarned: boolean; // True if all 12 monthly badges earned
+}
+
 export interface UserProgress {
   selectedTrailId: string | null;
   trailStartDate: string | null; // ISO Date
@@ -67,11 +89,19 @@ export interface UserProgress {
   // Last sync info
   lastSyncTime: string; // ISO Date String
 
-  // Gamification
-  unlockedBadges: string[]; // List of Badge IDs
+  // Monthly Badge Progress (new system)
+  monthlyProgress: MonthlyProgress;
+  yearlyProgress: YearlyProgress[];
+
+  // Trail Badges (lifetime - never reset)
+  trailBadges: string[]; // e.g., ["trail-1", "trail-3"]
+
+  // Completed Trails
   completedTrails: CompletedTrail[]; // List of completed Trail stats
   favoriteTrails?: string[]; // List of favorite trail IDs
-  currentStreak: number; // Keeping in DB for now, but removing from UI
+
+  // Legacy fields (kept for compatibility)
+  currentStreak: number;
   lastLogDate: string | null; // YYYY-MM-DD
 }
 

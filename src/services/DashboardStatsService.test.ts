@@ -114,7 +114,16 @@ describe('DashboardStatsService', () => {
                     completedTrailsCount: 0,
                 },
                 lastSyncTime: '2026-01-14',
-                unlockedBadges: [],
+                monthlyProgress: {
+                    year: 2026,
+                    month: 1,
+                    stepsThisMonth: 10000,
+                    distanceMetersThisMonth: 15000,
+                    unlockedBadgeIds: [],
+                    monthlyBadgeEarned: false
+                },
+                yearlyProgress: [],
+                trailBadges: [],
                 completedTrails: [],
                 currentStreak: 1,
                 lastLogDate: '2026-01-14',
@@ -139,12 +148,21 @@ describe('DashboardStatsService', () => {
                 totalStepsValid: 0,
                 currentDistanceMeters: 0,
                 stats: {
-                    totalStepsLifetime: 500, // Halfway to Baby Steps (1000)
+                    totalStepsLifetime: 500,
                     totalDistanceMetersLifetime: 0,
                     completedTrailsCount: 0,
                 },
                 lastSyncTime: '2026-01-14',
-                unlockedBadges: [],
+                monthlyProgress: {
+                    year: 2026,
+                    month: 1,
+                    stepsThisMonth: 2500, // Halfway to step-5k badge
+                    distanceMetersThisMonth: 2500,
+                    unlockedBadgeIds: [],
+                    monthlyBadgeEarned: false
+                },
+                yearlyProgress: [],
+                trailBadges: [],
                 completedTrails: [],
                 currentStreak: 0,
                 lastLogDate: null,

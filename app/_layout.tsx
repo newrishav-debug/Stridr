@@ -16,6 +16,7 @@ import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { PreferencesProvider, usePreferences } from '../src/context/PreferencesContext';
 import { ToastProvider } from '../src/context/ToastContext';
+import { logger } from '../src/services/LogService';
 
 const ProtectedLayout = () => {
     const { user, isLoading } = useAuth();
@@ -24,6 +25,7 @@ const ProtectedLayout = () => {
     const segments = useSegments();
 
     useEffect(() => {
+        logger.info('App Launched');
         if (isLoading) return;
 
         const inAuthGroup = segments[0] === 'login' || segments[0] === 'signup';

@@ -215,19 +215,20 @@ export const DashboardStatsService = {
 
     /**
      * Find the next closest badge the user can unlock and their progress toward it
+     * Updated for monthly badge system
      */
     getNextBadgeProgress(progress: UserProgress | null): NextBadgeProgress | null {
-        if (!progress) return null;
+        if (!progress || !progress.monthlyProgress) return null;
 
-        const unlockedBadges = new Set(progress.unlockedBadges || []);
-        const totalSteps = progress.stats?.totalStepsLifetime || 0;
-        const totalDistance = progress.stats?.totalDistanceMetersLifetime || 0;
-        const completedTrailsCount = progress.stats?.completedTrailsCount || 0;
+        const monthlyProgress = progress.monthlyProgress;
+        const unlockedBadges = new Set(monthlyProgress.unlockedBadgeIds || []);
+        const stepsThisMonth = monthlyProgress.stepsThisMonth || 0;
+        const distanceThisMonth = monthlyProgress.distanceMetersThisMonth || 0;
 
-        // Filter to only step and distance badges (most trackable progress)
+        // Filter to only monthly step and distance badges
         const progressBadges = BADGES.filter(b =>
             !unlockedBadges.has(b.id) &&
-            (b.conditionType === 'TOTAL_STEPS' || b.conditionType === 'TOTAL_DISTANCE' || b.conditionType === 'TRAIL_COMPLETE')
+            (b.conditionType === 'MONTHLY_STEPS' || b.conditionType === 'MONTHLY_DISTANCE')
         );
 
         if (progressBadges.length === 0) return null;
@@ -240,14 +241,11 @@ export const DashboardStatsService = {
             let target = badge.conditionValue;
 
             switch (badge.conditionType) {
-                case 'TOTAL_STEPS':
-                    current = totalSteps;
+                case 'MONTHLY_STEPS':
+                    current = stepsThisMonth;
                     break;
-                case 'TOTAL_DISTANCE':
-                    current = totalDistance;
-                    break;
-                case 'TRAIL_COMPLETE':
-                    current = completedTrailsCount;
+                case 'MONTHLY_DISTANCE':
+                    current = distanceThisMonth;
                     break;
             }
 
@@ -261,6 +259,7 @@ export const DashboardStatsService = {
 
         return closest;
     },
+
 
     /**
      * Get last N days of step history for chart display

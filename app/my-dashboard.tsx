@@ -21,11 +21,12 @@ import {
 } from 'lucide-react-native';
 import { ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BADGES } from '../src/const/badges';
+import { BADGES, MONTHLY_BADGES_TOTAL, MONTHLY_MASTER_REQUIREMENT, MONTH_NAMES, MONTH_ICONS } from '../src/const/badges';
 import { TRAILS } from '../src/const/trails';
 import { CalendarView } from '../src/components/CalendarView';
 import { SimpleLineChart } from '../src/components/SimpleLineChart';
 import { StepService } from '../src/services/StepService';
+import { BadgeService } from '../src/services/BadgeService';
 import { DashboardStatsService, WeeklyStats, GoalAchievementStats, PersonalRecords, NextBadgeProgress, filterHistoryByStartDate } from '../src/services/DashboardStatsService';
 import { useState, useEffect, useMemo } from 'react';
 
@@ -55,8 +56,15 @@ export default function MyDashboardScreen() {
         : 0;
     const distanceUnit = getDistanceUnit(preferences.distanceUnit);
     const totalSteps = progress?.stats?.totalStepsLifetime || 0;
-    const unlockedBadges = progress?.unlockedBadges || [];
     const goalProgress = Math.min((todaySteps / dailyGoal) * 100, 100);
+
+    // Monthly badge progress
+    const monthlyProgress = progress?.monthlyProgress;
+    const monthlyUnlockedCount = monthlyProgress?.unlockedBadgeIds.length || 0;
+    const badgesRemaining = Math.max(0, MONTHLY_MASTER_REQUIREMENT - monthlyUnlockedCount);
+    const currentMonth = new Date().getMonth() + 1;
+    const monthName = MONTH_NAMES[currentMonth - 1];
+    const monthIcon = MONTH_ICONS[currentMonth - 1];
 
     // Calculate derived stats
     const landmarksReached = useMemo(() =>
@@ -94,9 +102,9 @@ export default function MyDashboardScreen() {
         loadStats();
     }, [todaySteps, dailyGoal, user?.createdAt]);
 
-    // Calculate badge statistics
-    const unlockedBadgeObjects = (progress?.unlockedBadges || [])
-        .map(badgeId => BADGES.find(b => b.id === badgeId))
+    // Calculate badge statistics (using monthly badges)
+    const unlockedBadgeObjects = (monthlyProgress?.unlockedBadgeIds || [])
+        .map((badgeId: string) => BADGES.find(b => b.id === badgeId))
         .filter(Boolean);
     const recentBadges = unlockedBadgeObjects.slice(-5).reverse();
 
@@ -168,7 +176,56 @@ export default function MyDashboardScreen() {
                         </View>
                     </View>
 
-                    {/* ===== SECTION 2: THIS WEEK & MONTH ===== */}
+                    {/* ===== SECTION 1B: MONTHLY BADGE PROGRESS ===== */}
+                    <TouchableOpacity
+                        style={[styles.monthlyBadgeCard, { backgroundColor: theme.card }]}
+                        onPress={() => router.push('/(tabs)/achievements')}
+                        activeOpacity={0.8}
+                    >
+                        <View style={styles.monthlyBadgeHeader}>
+                            <Text style={styles.monthlyIcon}>{monthIcon}</Text>
+                            <View style={styles.monthlyInfo}>
+                                <Text style={[styles.monthlyTitle, { color: theme.text }]}>{monthName} Challenge</Text>
+                                <Text style={[styles.monthlySubtitle, { color: theme.textSecondary }]}>
+                                    {monthlyUnlockedCount}/{MONTHLY_BADGES_TOTAL} badges earned
+                                </Text>
+                            </View>
+                            <ChevronRight size={20} color={theme.textTertiary} />
+                        </View>
+                        <View style={[styles.monthlyProgressBar, { backgroundColor: theme.border }]}>
+                            <View style={[styles.monthlyProgressFill, { width: `${(monthlyUnlockedCount / MONTHLY_BADGES_TOTAL) * 100}%` }]} />
+                        </View>
+                        <Text style={[styles.monthlyRemaining, { color: badgesRemaining > 0 ? '#F59E0B' : '#10B981' }]}>
+                            {badgesRemaining > 0
+                                ? `${badgesRemaining} more for Monthly Master! 🏆`
+                                : '🎉 Monthly Master Earned!'
+                            }
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* ===== SECTION 1C: NEXT BADGE PROGRESS ===== */}
+                    {nextBadge && (
+                        <View style={[styles.nextBadgeCard, { backgroundColor: theme.card }]}>
+                            <View style={styles.nextBadgeLeft}>
+                                <View style={[styles.nextBadgeIconBg, { backgroundColor: theme.backgroundTertiary }]}>
+                                    <Text style={styles.nextBadgeEmoji}>{nextBadge.badge.icon}</Text>
+                                </View>
+                                <View style={styles.nextBadgeInfo}>
+                                    <Text style={[styles.nextBadgeName, { color: theme.text }]}>{nextBadge.badge.name}</Text>
+                                    <Text style={[styles.nextBadgeDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                                        {nextBadge.badge.description.replace('this month', `in ${monthName}`)}
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.nextBadgeProgress}>
+                                <Text style={[styles.nextBadgePercent, { color: '#3B82F6' }]}>{nextBadge.percent}%</Text>
+                                <View style={[styles.nextBadgeProgressBar, { backgroundColor: theme.border }]}>
+                                    <View style={[styles.nextBadgeProgressFill, { width: `${nextBadge.percent}%` }]} />
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
                     <Text style={[styles.sectionTitle, { color: theme.text }]}>Weekly & Monthly</Text>
                     <View style={styles.weeklyMonthlyRow}>
                         {/* Weekly Stats Card */}
@@ -337,7 +394,7 @@ export default function MyDashboardScreen() {
                             <View style={[styles.statIcon, { backgroundColor: '#F59E0B' }]}>
                                 <Award size={24} color="white" />
                             </View>
-                            <Text style={[styles.statValue, { color: theme.text }]}>{unlockedBadges.length}</Text>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{monthlyUnlockedCount}/{MONTHLY_BADGES_TOTAL}</Text>
                             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Badges</Text>
                         </View>
 
@@ -350,31 +407,7 @@ export default function MyDashboardScreen() {
                         </View>
                     </View>
 
-                    {/* ===== SECTION 7: NEXT BADGE PROGRESS ===== */}
-                    {nextBadge && (
-                        <>
-                            <Text style={[styles.sectionTitle, { color: theme.text }]}>Next Badge</Text>
-                            <View style={[styles.nextBadgeCard, { backgroundColor: theme.card }]}>
-                                <View style={styles.nextBadgeLeft}>
-                                    <View style={[styles.nextBadgeIconBg, { backgroundColor: theme.backgroundTertiary }]}>
-                                        <Text style={styles.nextBadgeEmoji}>{nextBadge.badge.icon}</Text>
-                                    </View>
-                                    <View style={styles.nextBadgeInfo}>
-                                        <Text style={[styles.nextBadgeName, { color: theme.text }]}>{nextBadge.badge.name}</Text>
-                                        <Text style={[styles.nextBadgeDesc, { color: theme.textSecondary }]} numberOfLines={1}>
-                                            {nextBadge.badge.description}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <View style={styles.nextBadgeProgress}>
-                                    <Text style={[styles.nextBadgePercent, { color: '#3B82F6' }]}>{nextBadge.percent}%</Text>
-                                    <View style={[styles.nextBadgeProgressBar, { backgroundColor: theme.border }]}>
-                                        <View style={[styles.nextBadgeProgressFill, { width: `${nextBadge.percent}%` }]} />
-                                    </View>
-                                </View>
-                            </View>
-                        </>
-                    )}
+
 
 
 
@@ -663,6 +696,52 @@ const styles = StyleSheet.create({
     goalPercentage: {
         fontSize: 14,
     },
+    // Monthly Badge Card
+    monthlyBadgeCard: {
+        marginBottom: 24,
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    monthlyBadgeHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    monthlyIcon: {
+        fontSize: 32,
+        marginRight: 12,
+    },
+    monthlyInfo: {
+        flex: 1,
+    },
+    monthlyTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    monthlySubtitle: {
+        fontSize: 14,
+        marginTop: 2,
+    },
+    monthlyProgressBar: {
+        height: 10,
+        borderRadius: 5,
+        overflow: 'hidden',
+        marginBottom: 8,
+    },
+    monthlyProgressFill: {
+        height: '100%',
+        backgroundColor: '#F59E0B',
+        borderRadius: 5,
+    },
+    monthlyRemaining: {
+        fontSize: 14,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
     // Section Titles
     sectionTitle: {
         fontSize: 18,
@@ -670,6 +749,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         marginTop: 8,
     },
+
     // Weekly & Monthly Cards
     weeklyMonthlyRow: {
         flexDirection: 'row',

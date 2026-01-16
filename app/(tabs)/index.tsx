@@ -58,7 +58,7 @@ export default function HomeScreen() {
     const distanceUnit = getDistanceUnit(preferences.distanceUnit);
     const totalSteps = progress.totalStepsValid || 0;
     const currentStreak = progress.currentStreak || 0;
-    const badgeCount = progress.unlockedBadges?.length || 0;
+    const badgeCount = progress.monthlyProgress?.unlockedBadgeIds?.length || 0;
 
     // Get available trails
     const availableTrails = TRAILS;

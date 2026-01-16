@@ -290,15 +290,9 @@ export default function ProgressScreen() {
                     </View>
 
                     {/* Stats Grid */}
+                    {/* Stats Grid */}
                     <View style={[styles.card, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
                         <View style={styles.statsRow}>
-                            <View style={styles.statItem}>
-                                <Text style={[styles.statVal, { color: theme.text }]}>{progress.totalStepsValid?.toLocaleString() || 0}</Text>
-                                <Text style={[styles.statLab, { color: theme.textSecondary }]}>Total Steps</Text>
-                            </View>
-
-                            <View style={[styles.verticalDivider, { backgroundColor: theme.border }]} />
-
                             <View style={styles.statItem}>
                                 <Text style={[styles.statVal, { color: theme.text }]}>{todaySteps.toLocaleString()}</Text>
                                 <Text style={[styles.statLab, { color: theme.textSecondary }]}>Steps Today</Text>
@@ -307,12 +301,19 @@ export default function ProgressScreen() {
                             <View style={[styles.verticalDivider, { backgroundColor: theme.border }]} />
 
                             <View style={styles.statItem}>
+                                <Text style={[styles.statVal, { color: theme.text }]}>{progress.totalStepsValid?.toLocaleString() || 0}</Text>
+                                <Text style={[styles.statLab, { color: theme.textSecondary }]}>Total Steps</Text>
+                            </View>
+
+                            <View style={[styles.verticalDivider, { backgroundColor: theme.border }]} />
+
+                            <View style={styles.statItem}>
                                 <Text style={[styles.statVal, { color: theme.text }]}>
                                     {(() => {
-                                        const daysSinceStart = Math.max(1, Math.floor(
+                                        const daysSinceStart = Math.floor(
                                             (new Date().getTime() - new Date(progress.trailStartDate!).getTime()) / (1000 * 60 * 60 * 24)
-                                        ));
-                                        const avgSteps = Math.round(progress.totalStepsValid / daysSinceStart);
+                                        ) + 1;
+                                        const avgSteps = Math.round(progress.totalStepsValid / Math.max(1, daysSinceStart));
                                         return avgSteps.toLocaleString();
                                     })()}
                                 </Text>

@@ -59,7 +59,21 @@ describe('StatsService', () => {
             totalStepsValid: 2000,
             currentDistanceMeters: 1500, // Completed (> 1000)
             lastSyncTime: '2024-01-05T00:00:00.000Z',
-            unlockedBadges: [],
+            stats: {
+                totalStepsLifetime: 2000,
+                totalDistanceMetersLifetime: 1500,
+                completedTrailsCount: 0
+            },
+            monthlyProgress: {
+                year: 2024,
+                month: 1,
+                stepsThisMonth: 2000,
+                distanceMetersThisMonth: 1500,
+                unlockedBadgeIds: [],
+                monthlyBadgeEarned: false
+            },
+            yearlyProgress: [],
+            trailBadges: [],
             completedTrails: [],
             currentStreak: 1,
             lastLogDate: '2024-01-05'

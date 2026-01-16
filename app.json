@@ -41,7 +41,8 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-background-fetch"
+      "expo-background-fetch",
+      "expo-mail-composer"
     ],
     "extra": {
       "router": {},

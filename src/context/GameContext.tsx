@@ -7,15 +7,16 @@
  * Modification History:
  * 2024-01-12: Refactored to use services.
  * 2024-01-12: Added notification triggers for badges, goals, milestones.
+ * 2026-01-15: Revamped badge system with monthly recurring badges.
  */
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { AppState } from 'react-native';
-import { UserProgress, CompletedTrail, DailyLog } from '../types';
+import { UserProgress, CompletedTrail, MonthlyProgress, YearlyProgress } from '../types';
 import { StorageService } from '../services/StorageService';
 import { StepService } from '../services/StepService';
 import { NotificationService } from '../services/NotificationService';
 import { stepsToMeters } from '../utils/conversion';
-import { BADGES } from '../const/badges';
+import { BADGES, ALL_MONTHLY_BADGES, TRAIL_BADGES } from '../const/badges';
 import { TRAILS } from '../const/trails';
 import { useAuth } from './AuthContext';
 import { StatsService } from '../services/StatsService';
@@ -39,6 +40,47 @@ interface GameContextType {
 
 const GameContext = createContext<GameContextType>({} as GameContextType);
 
+/**
+ * Helper: Check if we need to reset monthly progress (new month started)
+ */
+const checkAndResetMonthlyProgress = (currentProgress: MonthlyProgress | undefined, now: Date): MonthlyProgress => {
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
+
+    if (!currentProgress || currentProgress.year !== currentYear || currentProgress.month !== currentMonth) {
+        console.log(`[GameContext] New month detected: ${currentMonth}/${currentYear}. Resetting monthly progress.`);
+        return BadgeService.createNewMonthlyProgress(currentYear, currentMonth);
+    }
+
+    return currentProgress;
+};
+
+/**
+ * Helper: Create default UserProgress
+ */
+const createDefaultProgress = (): UserProgress => {
+    const now = new Date();
+    return {
+        selectedTrailId: null,
+        trailStartDate: null,
+        targetDays: 7,
+        totalStepsValid: 0,
+        currentDistanceMeters: 0,
+        stats: {
+            totalStepsLifetime: 0,
+            totalDistanceMetersLifetime: 0,
+            completedTrailsCount: 0
+        },
+        lastSyncTime: now.toISOString(),
+        monthlyProgress: BadgeService.createNewMonthlyProgress(now.getFullYear(), now.getMonth() + 1),
+        yearlyProgress: [],
+        trailBadges: [],
+        completedTrails: [],
+        currentStreak: 0,
+        lastLogDate: null
+    };
+};
+
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
     const [progress, setProgress] = useState<UserProgress | null>(null);
@@ -59,55 +101,58 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadData = async (userId: string) => {
         setIsLoading(true);
         let p = await StorageService.getProgress(userId);
+        const now = new Date();
 
         // Initialize progress for new users
         if (!p) {
-            p = {
-                selectedTrailId: null,
-                trailStartDate: null,
-                targetDays: 7,
-                totalStepsValid: 0,
-                currentDistanceMeters: 0,
-                stats: {
-                    totalStepsLifetime: 0,
-                    totalDistanceMetersLifetime: 0,
-                    completedTrailsCount: 0
-                },
-                lastSyncTime: new Date().toISOString(),
-                unlockedBadges: [],
-                currentStreak: 0,
-                lastLogDate: null,
-                completedTrails: [],
-            };
+            p = createDefaultProgress();
             await StorageService.saveProgress(userId, p);
         }
 
-        // Migration: Ensure stats object exists for existing users
+        // Migration: Ensure stats object exists
         if (!p.stats) {
             console.log('Migrating: Adding stats object to UserProgress');
             p.stats = {
-                // Approximate lifetime stats for existing users based on current trail + completed trails
                 totalStepsLifetime: p.totalStepsValid + (p.completedTrails?.reduce((acc: number, t: any) => acc + (t.totalSteps || 0), 0) || 0),
-                totalDistanceMetersLifetime: p.currentDistanceMeters, // This is an under-estimation as we don't store distance in completedTrails explicitly usually
+                totalDistanceMetersLifetime: p.currentDistanceMeters,
                 completedTrailsCount: p.completedTrails?.length || 0
             };
         }
 
+        // Migration: Initialize monthly progress if missing
+        if (!p.monthlyProgress) {
+            console.log('Migrating: Adding monthlyProgress to UserProgress');
+            p.monthlyProgress = BadgeService.createNewMonthlyProgress(now.getFullYear(), now.getMonth() + 1);
+        }
+
+        // Migration: Initialize yearly progress if missing
+        if (!p.yearlyProgress) {
+            p.yearlyProgress = [];
+        }
+
+        // Migration: Initialize trail badges if missing
+        if (!p.trailBadges) {
+            p.trailBadges = [];
+        }
+
+        // Migration: Ensure completedTrails is array
         if (!p.completedTrails) {
-            p.completedTrails = []; // Initialize if missing
+            p.completedTrails = [];
         } else if (p.completedTrails.length > 0 && typeof p.completedTrails[0] === 'string') {
-            // Migration: Convert old string IDs to CompletedTrail objects
             console.log('Migrating completedTrails from strings to objects');
             p.completedTrails = (p.completedTrails as any[]).map((id: string) => ({
                 trailId: id,
-                completedDate: new Date().toISOString(), // Fallback
-                startDate: new Date().toISOString(), // Fallback
+                completedDate: new Date().toISOString(),
+                startDate: new Date().toISOString(),
                 totalSteps: 0,
                 totalDays: 1,
                 avgStepsPerDay: 0,
                 maxStepsInOneDay: 0
             }));
         }
+
+        // Check if month has changed and reset monthly progress
+        p.monthlyProgress = checkAndResetMonthlyProgress(p.monthlyProgress, now);
 
         setProgress(p);
 
@@ -122,26 +167,23 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Automatic hourly sync while app is active
     useEffect(() => {
-        if (!user) return; // Sync permitted as long as user is logged in, no trail needed
+        if (!user) return;
 
-        // Initial sync when component loads
         sync();
 
-        // Set up hourly sync interval (3600000 ms = 1 hour)
         const HOUR_IN_MS = 60 * 60 * 1000;
         const syncInterval = setInterval(() => {
             console.log('[GameContext] Automatic hourly sync triggered');
             sync();
         }, HOUR_IN_MS);
 
-        // Cleanup interval on unmount or when dependencies change
         return () => {
             console.log('[GameContext] Cleaning up sync interval');
             clearInterval(syncInterval);
         };
     }, [user]);
 
-    // Sync when app comes to foreground/resumes
+    // Sync when app comes to foreground
     useEffect(() => {
         if (!user) return;
 
@@ -152,7 +194,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         });
 
-        // Cleanup listener on unmount
         return () => {
             subscription.remove();
         };
@@ -170,9 +211,24 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const completedTrail = StatsService.checkTrailCompletion(currentProgress, currentTrail, new Date(), logs);
 
             if (completedTrail) {
+                const newCompletedTrails = [...(currentProgress.completedTrails || []), completedTrail];
+                const newCompletedCount = newCompletedTrails.length;
+
+                // Check for new trail badges
+                const newTrailBadges = BadgeService.checkTrailBadges(
+                    newCompletedCount,
+                    TRAILS.length,
+                    currentProgress.trailBadges || []
+                );
+
                 return {
                     ...currentProgress,
-                    completedTrails: [...(currentProgress.completedTrails || []), completedTrail],
+                    completedTrails: newCompletedTrails,
+                    trailBadges: [...(currentProgress.trailBadges || []), ...newTrailBadges],
+                    stats: {
+                        ...currentProgress.stats,
+                        completedTrailsCount: newCompletedCount
+                    },
                     selectedTrailId: null,
                     currentDistanceMeters: 0,
                     totalStepsValid: 0,
@@ -195,7 +251,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const permitted = await StepService.requestPermissions();
             if (!permitted) {
-                // Silent fail if no permission, or maybe log it
                 console.log('Step permission denied during sync');
                 return;
             }
@@ -205,36 +260,96 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (newSteps > 0) {
                 const addedDistance = stepsToMeters(newSteps);
 
-                // Streak Logic (Calculating but hiding from UI as requested)
+                // Streak Logic
                 const newStreak = StatsService.calculateStreak(progress.currentStreak || 0, progress.lastLogDate, now);
                 const nowString = now.toISOString().split('T')[0];
 
-                // Get user preferences for notifications
+                // Get user preferences
                 const prefs = await StorageService.getPreferences(user.id);
                 const notificationsEnabled = prefs?.notificationsEnabled ?? false;
                 const notifSettings = prefs?.notificationSettings;
 
-                // Update Progress
+                // Check if month changed and reset monthly progress
+                let monthlyProgress = checkAndResetMonthlyProgress(progress.monthlyProgress, now);
+
+                // Update monthly progress
+                monthlyProgress = {
+                    ...monthlyProgress,
+                    stepsThisMonth: monthlyProgress.stepsThisMonth + newSteps,
+                    distanceMetersThisMonth: monthlyProgress.distanceMetersThisMonth + addedDistance
+                };
+
+                // Check for new monthly badges
+                const newMonthlyBadges = BadgeService.checkAllMonthlyBadges(monthlyProgress);
+                if (newMonthlyBadges.length > 0) {
+                    monthlyProgress.unlockedBadgeIds = [...monthlyProgress.unlockedBadgeIds, ...newMonthlyBadges];
+
+                    // Badge unlock notifications
+                    if (notificationsEnabled && notifSettings?.badgeUnlock) {
+                        for (const badgeId of newMonthlyBadges) {
+                            const badge = BADGES.find(b => b.id === badgeId);
+                            if (badge) {
+                                await NotificationService.sendBadgeUnlock(badge.name, badge.icon);
+                            }
+                        }
+                    }
+                }
+
+                // Check if monthly master earned
+                let yearlyProgress = [...(progress.yearlyProgress || [])];
+                if (!monthlyProgress.monthlyBadgeEarned && BadgeService.checkMonthlyMaster(monthlyProgress)) {
+                    monthlyProgress.monthlyBadgeEarned = true;
+
+                    // Update yearly progress
+                    let yearProgress = yearlyProgress.find(yp => yp.year === monthlyProgress.year);
+                    if (!yearProgress) {
+                        yearProgress = { year: monthlyProgress.year, monthlyBadgesEarned: [], yearlyBadgeEarned: false };
+                        yearlyProgress.push(yearProgress);
+                    }
+                    if (!yearProgress.monthlyBadgesEarned.includes(monthlyProgress.month)) {
+                        yearProgress.monthlyBadgesEarned.push(monthlyProgress.month);
+                    }
+
+                    // Check yearly champion
+                    if (!yearProgress.yearlyBadgeEarned && BadgeService.checkYearlyChampion(yearProgress)) {
+                        yearProgress.yearlyBadgeEarned = true;
+                        if (notificationsEnabled && notifSettings?.badgeUnlock) {
+                            await NotificationService.sendBadgeUnlock(
+                                BadgeService.getYearlyChampionName(yearProgress.year),
+                                '🏆'
+                            );
+                        }
+                    }
+
+                    // Notify monthly master
+                    if (notificationsEnabled && notifSettings?.badgeUnlock) {
+                        await NotificationService.sendBadgeUnlock(
+                            BadgeService.getMonthlyMasterName(monthlyProgress.year, monthlyProgress.month),
+                            BadgeService.getMonthlyMasterIcon(monthlyProgress.month)
+                        );
+                    }
+                }
+
+                // Build updated progress
                 let newProgress: UserProgress = {
                     ...progress,
-                    // ALWAYS update lifetime stats
                     stats: {
                         ...progress.stats,
                         totalStepsLifetime: (progress.stats?.totalStepsLifetime || 0) + newSteps,
                         totalDistanceMetersLifetime: (progress.stats?.totalDistanceMetersLifetime || 0) + addedDistance,
                         completedTrailsCount: progress.completedTrails?.length || 0
                     },
-                    // ONLY update active trail stats if a trail is selected
                     totalStepsValid: progress.selectedTrailId ? progress.totalStepsValid + newSteps : progress.totalStepsValid,
                     currentDistanceMeters: progress.selectedTrailId ? progress.currentDistanceMeters + addedDistance : progress.currentDistanceMeters,
-
                     lastSyncTime: now.toISOString(),
                     currentStreak: newStreak,
                     lastLogDate: nowString,
-                    completedTrails: progress.completedTrails || []
+                    completedTrails: progress.completedTrails || [],
+                    monthlyProgress,
+                    yearlyProgress
                 };
 
-                // Store previous milestone % before update for milestone notifications
+                // Trail milestone notifications
                 const currentTrail = newProgress.selectedTrailId
                     ? TRAILS.find(t => t.id === newProgress.selectedTrailId)
                     : null;
@@ -242,19 +357,18 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     ? Math.floor((progress.currentDistanceMeters / currentTrail.totalDistanceMeters) * 100)
                     : 0;
 
-                // Check for Trail Completion (only if we have an active trail)
+                // Check for Trail Completion
                 const wasCompleted = newProgress.selectedTrailId !== null;
                 if (currentTrail) {
                     newProgress = await checkAndCompleteTrail(newProgress);
                 }
                 const isNowCompleted = newProgress.selectedTrailId === null && wasCompleted;
 
-                // If completed, update the completed count in stats
                 if (isNowCompleted) {
                     newProgress.stats.completedTrailsCount = newProgress.completedTrails.length;
                 }
 
-                // Milestone notification (25%, 50%, 75%, 100%)
+                // Trail milestone notifications
                 if (notificationsEnabled && notifSettings?.milestone && currentTrail && !isNowCompleted) {
                     const newPercent = Math.floor((newProgress.currentDistanceMeters / currentTrail.totalDistanceMeters) * 100);
                     const milestones = [25, 50, 75];
@@ -271,7 +385,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     await NotificationService.sendMilestone(100, currentTrail.name);
                 }
 
-                // Landmark reached notification
+                // Landmark notifications
                 if (notificationsEnabled && notifSettings?.landmarkReached && currentTrail) {
                     const newlyReachedLandmarks = currentTrail.landmarks.filter(
                         lm => lm.distanceMeters <= newProgress.currentDistanceMeters &&
@@ -283,29 +397,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                 }
 
-                // Check for new badges (using global stats now ideally)
-                const newBadgeIds = BadgeService.checkNewBadges(newProgress);
-                if (newBadgeIds.length > 0) {
-                    newProgress.unlockedBadges = [...(newProgress.unlockedBadges || []), ...newBadgeIds];
-
-                    // Badge unlock notifications
-                    if (notificationsEnabled && notifSettings?.badgeUnlock) {
-                        for (const badgeId of newBadgeIds) {
-                            const badge = BADGES.find(b => b.id === badgeId);
-                            if (badge) {
-                                await NotificationService.sendBadgeUnlock(badge.name, badge.icon);
-                            }
-                        }
-                    }
-                }
-
                 setProgress(newProgress);
                 await StorageService.saveProgress(user.id, newProgress);
 
                 const today = await StepService.getTodaySteps();
                 setTodaySteps(today);
 
-                // Goal achievement notification (once per day)
+                // Goal achievement notification
                 const dailyGoal = prefs?.dailyGoal ?? 10000;
                 if (notificationsEnabled && notifSettings?.goalAchievement) {
                     if (today >= dailyGoal && goalNotifiedToday.current !== nowString) {
@@ -314,7 +412,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                 }
             } else {
-                const newProgress = { ...progress, lastSyncTime: now.toISOString() };
+                // Even if no steps, check if month changed
+                const monthlyProgress = checkAndResetMonthlyProgress(progress.monthlyProgress, now);
+                const newProgress = { ...progress, lastSyncTime: now.toISOString(), monthlyProgress };
                 setProgress(newProgress);
                 await StorageService.saveProgress(user.id, newProgress);
             }
@@ -334,14 +434,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             trailStartDate: startOfToday.toISOString(),
             totalStepsValid: 0,
             currentDistanceMeters: 0,
-            // Preserve global stats
             stats: progress?.stats || {
                 totalStepsLifetime: 0,
                 totalDistanceMetersLifetime: 0,
                 completedTrailsCount: 0
             },
             lastSyncTime: startOfToday.toISOString(),
-            unlockedBadges: progress?.unlockedBadges || [],
+            monthlyProgress: progress?.monthlyProgress || BadgeService.createNewMonthlyProgress(startOfToday.getFullYear(), startOfToday.getMonth() + 1),
+            yearlyProgress: progress?.yearlyProgress || [],
+            trailBadges: progress?.trailBadges || [],
             completedTrails: progress?.completedTrails || [],
             currentStreak: progress?.currentStreak || 0,
             lastLogDate: progress?.lastLogDate || null
@@ -361,10 +462,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await StorageService.saveProgress(user.id, newProgress);
     };
 
-
-
     if (isLoading && !progress) {
-        // Only block if loading AND no data. If not loading and no progress, it means no user or empty data.
         return null;
     }
 
@@ -380,13 +478,31 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             debug: {
                 addSteps: async (amount: number) => {
                     if (!progress || !user) return;
-                    let newProgress = {
+                    const addedDistance = stepsToMeters(amount);
+
+                    // Update monthly progress
+                    let monthlyProgress = { ...progress.monthlyProgress };
+                    monthlyProgress.stepsThisMonth += amount;
+                    monthlyProgress.distanceMetersThisMonth += addedDistance;
+
+                    // Check monthly badges
+                    const newMonthlyBadges = BadgeService.checkAllMonthlyBadges(monthlyProgress);
+                    if (newMonthlyBadges.length > 0) {
+                        monthlyProgress.unlockedBadgeIds = [...monthlyProgress.unlockedBadgeIds, ...newMonthlyBadges];
+                    }
+
+                    // Check monthly master
+                    if (!monthlyProgress.monthlyBadgeEarned && BadgeService.checkMonthlyMaster(monthlyProgress)) {
+                        monthlyProgress.monthlyBadgeEarned = true;
+                    }
+
+                    let newProgress: UserProgress = {
                         ...progress,
                         totalStepsValid: progress.totalStepsValid + amount,
-                        currentDistanceMeters: progress.currentDistanceMeters + stepsToMeters(amount)
+                        currentDistanceMeters: progress.currentDistanceMeters + addedDistance,
+                        monthlyProgress
                     };
 
-                    // Check for completion immediately
                     newProgress = await checkAndCompleteTrail(newProgress);
 
                     setProgress(newProgress);
@@ -400,22 +516,22 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 },
                 resetProgress: async () => {
                     if (!user) return;
+                    const now = new Date();
                     await StorageService.saveProgress(user.id, {
                         selectedTrailId: null,
                         trailStartDate: null,
                         targetDays: 0,
                         totalStepsValid: 0,
                         currentDistanceMeters: 0,
-                        // Reset stats too? Or keep lifetime? Usually "Reset Progress" implies everything.
-                        // But since user wants Global Stats to be persistent, let's keep them zeroed only if explicitly requested.
-                        // For now, let's assume resetProgress is a full hard reset (debug tool).
                         stats: {
                             totalStepsLifetime: 0,
                             totalDistanceMetersLifetime: 0,
                             completedTrailsCount: 0
                         },
-                        lastSyncTime: new Date().toISOString(),
-                        unlockedBadges: [],
+                        lastSyncTime: now.toISOString(),
+                        monthlyProgress: BadgeService.createNewMonthlyProgress(now.getFullYear(), now.getMonth() + 1),
+                        yearlyProgress: [],
+                        trailBadges: [],
                         completedTrails: [],
                         currentStreak: 0,
                         lastLogDate: null
@@ -424,8 +540,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 },
                 unlockAllBadges: async () => {
                     if (!progress || !user) return;
-                    const allIds = BADGES.map(b => b.id);
-                    const newProgress = { ...progress, unlockedBadges: allIds };
+                    const allMonthlyIds = ALL_MONTHLY_BADGES.map(b => b.id);
+                    const allTrailIds = TRAIL_BADGES.map(b => b.id);
+                    const newProgress = {
+                        ...progress,
+                        monthlyProgress: {
+                            ...progress.monthlyProgress,
+                            unlockedBadgeIds: allMonthlyIds,
+                            monthlyBadgeEarned: true
+                        },
+                        trailBadges: allTrailIds
+                    };
                     setProgress(newProgress);
                     await StorageService.saveProgress(user.id, newProgress);
                 }

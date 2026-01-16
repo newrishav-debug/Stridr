@@ -14,6 +14,9 @@ import { usePreferences, useTheme } from '../../src/context/PreferencesContext';
 import { useGame } from '../../src/context/GameContext';
 import { DebugMenu } from '../../src/components/DebugMenu';
 import { useState } from 'react';
+import * as MailComposer from 'expo-mail-composer';
+import * as Sharing from 'expo-sharing';
+import { logger } from '../../src/services/LogService';
 
 import {
     CircleUser,
@@ -34,7 +37,8 @@ import {
     Shield,
     FileText,
     Heart,
-    X
+    X,
+    AlertTriangle
 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -120,6 +124,35 @@ export default function ProfileScreen() {
                 }
             ]
         );
+    };
+
+    const handleReportCrash = async () => {
+        try {
+            const logUri = logger.getLogFileUri();
+            const isAvailable = await MailComposer.isAvailableAsync();
+
+            if (isAvailable) {
+                await MailComposer.composeAsync({
+                    subject: `Crash Report - User: ${user?.name || 'Unknown'}`,
+                    body: 'Please describe what happened before the crash:\n\n',
+                    recipients: ['newrishav@gmail.com'],
+                    attachments: [logUri]
+                });
+            } else {
+                // Fallback to sharing if mail is not configured
+                if (await Sharing.isAvailableAsync()) {
+                    await Sharing.shareAsync(logUri, {
+                        mimeType: 'text/plain',
+                        dialogTitle: 'Share Crash Logs'
+                    });
+                } else {
+                    Alert.alert('Error', 'Unable to share logs. Mail is not configured and sharing is unavailable.');
+                }
+            }
+        } catch (error) {
+            console.error('Error sharing logs:', error);
+            Alert.alert('Error', 'Failed to prepare crash report.');
+        }
     };
 
     if (!user) return null;
@@ -404,6 +437,21 @@ export default function ProfileScreen() {
                                     <Bug size={20} color="white" />
                                 </View>
                                 <Text style={[styles.settingText, { color: theme.text }]}>Report a Bug</Text>
+                            </View>
+                            <ChevronRight size={20} color={theme.textTertiary} />
+                        </TouchableOpacity>
+
+                        <View style={[styles.settingDivider, { backgroundColor: theme.border }]} />
+
+                        <TouchableOpacity
+                            style={styles.settingItem}
+                            onPress={handleReportCrash}
+                        >
+                            <View style={styles.settingLeft}>
+                                <View style={[styles.iconBox, { backgroundColor: '#F97316' }]}>
+                                    <AlertTriangle size={20} color="white" />
+                                </View>
+                                <Text style={[styles.settingText, { color: theme.text }]}>Report a Crash</Text>
                             </View>
                             <ChevronRight size={20} color={theme.textTertiary} />
                         </TouchableOpacity>
