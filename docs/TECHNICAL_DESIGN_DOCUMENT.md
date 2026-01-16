@@ -1,7 +1,7 @@
 # Stridr - Technical Design Document
 
-**Version:** 1.0  
-**Last Updated:** January 13, 2026  
+**Version:** 1.1  
+**Last Updated:** January 15, 2026  
 **Status:** Pre-Launch
 
 ---
@@ -56,7 +56,7 @@ graph TB
     subgraph "External APIs"
         PED[Device Pedometer]
         NOTIF[Push Notifications]
-        AS[AsyncStorage]
+        FB[Firebase Firestore]
     end
     
     UI --> AC
@@ -75,7 +75,7 @@ graph TB
     
     SS --> PED
     NS --> NOTIF
-    STO --> AS
+    STO --> FB
 ```
 
 ### 1.2 Data Flow Overview
@@ -137,6 +137,7 @@ sequenceDiagram
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `@react-native-async-storage/async-storage` | 2.2.0 | Local key-value storage |
+| `firebase` | ^11.x | Cloud database & auth |
 
 ### 2.5 Notifications & Background
 
@@ -454,17 +455,38 @@ export const StorageService = {
 ### 5.3 BadgeService
 
 **File:** `src/services/BadgeService.ts`  
-**Purpose:** Badge unlock condition evaluation.
+**Purpose:** Monthly recurring badge system with step, distance, and trail badges.
 
 ```typescript
 export const BadgeService = {
-    /**
-     * Checks all badges against current progress.
-     * Returns array of NEWLY unlocked badge IDs only.
-     */
-    checkNewBadges(progress: UserProgress): string[]
+    // Monthly badge checks
+    checkMonthlyStepBadges(steps: number, alreadyUnlocked: string[]): string[]
+    checkMonthlyDistanceBadges(distance: number, alreadyUnlocked: string[]): string[]
+    checkAllMonthlyBadges(monthlyProgress: MonthlyProgress): string[]
+    
+    // Super badges
+    checkMonthlyMaster(monthlyProgress: MonthlyProgress): boolean
+    checkYearlyChampion(yearlyProgress: YearlyProgress): boolean
+    
+    // Lifetime badges
+    checkTrailBadges(completedCount: number, totalTrails: number, alreadyUnlocked: string[]): string[]
+    
+    // Helpers
+    getNextBadges(monthlyProgress: MonthlyProgress): NextBadgeInfo[]
+    getBadgesRemainingForMonthly(monthlyProgress: MonthlyProgress): number
+    createNewMonthlyProgress(year: number, month: number): MonthlyProgress
 }
 ```
+
+**Badge Condition Types:**
+
+| Type | Evaluation |
+|------|------------|
+| `MONTHLY_STEPS` | `monthlyProgress.stepsThisMonth >= conditionValue` |
+| `MONTHLY_DISTANCE` | `monthlyProgress.distanceMetersThisMonth >= conditionValue` |
+| `TRAILS_COMPLETED` | `stats.completedTrailsCount >= conditionValue` |
+| `MONTHLY_MASTER` | `monthlyProgress.unlockedBadgeIds.length >= 10` |
+| `YEARLY_CHAMPION` | `yearlyProgress.monthlyBadgesEarned.length >= 12` |
 
 **Badge Condition Types:**
 
@@ -613,12 +635,37 @@ interface UserProgress {
     // Sync State
     lastSyncTime: string;             // ISO Date String
     
-    // Gamification
-    unlockedBadges: string[];         // Badge IDs
+    // Lifetime Stats
+    stats: {
+        totalStepsLifetime: number;
+        totalDistanceMetersLifetime: number;
+        completedTrailsCount: number;
+    };
+    
+    // Monthly Badge System
+    monthlyProgress: MonthlyProgress;  // Current month badges
+    yearlyProgress: YearlyProgress[];  // History of yearly progress
+    trailBadges: string[];             // Lifetime trail completion badges
+    
+    // Trail History
     completedTrails: CompletedTrail[];
-    favoriteTrails?: string[];        // Trail IDs marked as favorites
     currentStreak: number;
     lastLogDate: string | null;       // YYYY-MM-DD format
+}
+
+interface MonthlyProgress {
+    year: number;
+    month: number;
+    stepsThisMonth: number;
+    distanceMetersThisMonth: number;
+    unlockedBadgeIds: string[];
+    monthlyBadgeEarned: boolean;
+}
+
+interface YearlyProgress {
+    year: number;
+    monthlyBadgesEarned: number[];  // Array of months (1-12)
+    yearlyBadgeEarned: boolean;
 }
 ```
 
@@ -652,13 +699,25 @@ interface DailyLog {
 interface Badge {
     id: string;                  // Unique identifier
     name: string;                // Display name
-    description: string;         // Static description
-    descriptionTemplate?: (unit: 'km' | 'mi') => string;  // Dynamic description
+    description: string;         // Description (e.g., "Walk 5,000 steps this month")
     icon: string;                // Emoji icon
-    conditionType: 'TOTAL_STEPS' | 'TOTAL_DISTANCE' | 'STREAK' | 
-                   'TRAIL_COMPLETE' | 'SEASON' | 'MONTH';
+    conditionType: 'MONTHLY_STEPS' | 'MONTHLY_DISTANCE' | 'TRAILS_COMPLETED' | 
+                   'MONTHLY_MASTER' | 'YEARLY_CHAMPION';
     conditionValue: number;      // Threshold value
     collection: string;          // Collection ID for grouping
+}
+```
+
+### 6.7 MonthlyProgress
+
+```typescript
+interface MonthlyProgress {
+    year: number;                    // e.g., 2026
+    month: number;                   // 1-12
+    stepsThisMonth: number;          // Accumulated steps this month
+    distanceMetersThisMonth: number; // Accumulated distance this month
+    unlockedBadgeIds: string[];      // Monthly badges earned
+    monthlyBadgeEarned: boolean;     // Has earned Monthly Master
 }
 ```
 

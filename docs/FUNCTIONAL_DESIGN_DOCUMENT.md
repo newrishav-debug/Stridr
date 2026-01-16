@@ -1,7 +1,7 @@
 # Stridr - Functional Design Document
 
-**Version:** 1.0  
-**Last Updated:** January 13, 2026  
+**Version:** 1.1  
+**Last Updated:** January 15, 2026  
 **Status:** Pre-Launch
 
 ---
@@ -30,6 +30,8 @@ Turn mundane daily walks into exciting virtual adventures exploring India's most
 | Navigation | Expo Router (file-based) |
 | State Management | React Context API |
 | Local Storage | AsyncStorage |
+| Cloud Storage | Firebase Firestore |
+| Authentication | Firebase Auth (Email/Password) |
 | Sensors | expo-sensors (Pedometer) |
 | Notifications | expo-notifications |
 | Background Tasks | expo-background-fetch, expo-task-manager |
@@ -101,11 +103,26 @@ interface UserProgress {
   totalStepsValid: number;
   currentDistanceMeters: number;
   lastSyncTime: string;
-  unlockedBadges: string[];
   completedTrails: CompletedTrail[];
-  favoriteTrails: string[];
   currentStreak: number;
   lastLogDate: string | null;
+  stats: {
+    totalStepsLifetime: number;
+    totalDistanceMetersLifetime: number;
+    completedTrailsCount: number;
+  };
+  monthlyProgress: MonthlyProgress;
+  yearlyProgress: YearlyProgress[];
+  trailBadges: string[];
+}
+
+interface MonthlyProgress {
+  year: number;
+  month: number;
+  stepsThisMonth: number;
+  distanceMetersThisMonth: number;
+  unlockedBadgeIds: string[];
+  monthlyBadgeEarned: boolean;
 }
 ```
 
@@ -115,20 +132,46 @@ interface UserProgress {
 
 **Purpose:** Provide engaging virtual trekking experiences mapped to real Indian Himalayan trails.
 
-#### Available Trails (Incredible India Collection)
+#### Available Trails
 
-| Trail Name | Distance | Difficulty | Landmarks |
-|------------|----------|------------|-----------|
-| Roopkund Trek | 53 km | Hard | 8 landmarks |
-| Chadar Trek | 65 km | Extreme | 6 landmarks |
-| Kedarkantha Trek | 20 km | Easy | 6 landmarks |
-| Valley of Flowers | 38 km | Moderate | 6 landmarks |
-| Hampta Pass Trek | 26 km | Moderate | 6 landmarks |
-| Goechala Trek | 90 km | Hard | 7 landmarks |
-| Markha Valley Trek | 78 km | Hard | 6 landmarks |
-| Pin Parvati Pass | 110 km | Extreme | 8 landmarks |
-| Sandakphu Trek | 64 km | Moderate | 6 landmarks |
-| Stok Kangri | 16 km | Extreme | 5 landmarks |
+**Incredible India Treks (15 trails)**
+
+| Trail Name | Distance | Difficulty |
+|------------|----------|------------|
+| Roopkund Trek | 53 km | Hard |
+| Chadar Trek | 65 km | Extreme |
+| Kedarkantha Trek | 20 km | Easy |
+| Valley of Flowers | 38 km | Moderate |
+| Hampta Pass Trek | 26 km | Moderate |
+| Goechala Trek | 90 km | Hard |
+| Markha Valley Trek | 78 km | Hard |
+| Pin Parvati Pass | 110 km | Extreme |
+| Sandakphu Trek | 64 km | Moderate |
+| Stok Kangri | 16 km | Extreme |
+| Triund Trek | 9 km | Easy |
+| Chembra Peak | 9 km | Moderate |
+| Rajmachi Trek | 16 km | Easy |
+| Dzükou Valley Trek | 20 km | Moderate |
+| Kodachadri Trek | 20 km | Moderate |
+
+**Classic Marathons (6 trails)**
+
+| Trail Name | Distance | Difficulty |
+|------------|----------|------------|
+| 5K Challenge | 5 km | Easy |
+| 10K Classic | 10 km | Moderate |
+| Half Marathon | 21.1 km | Hard |
+| Full Marathon | 42.2 km | Extreme |
+| 50K Ultra | 50 km | Extreme |
+| 100K Ultra | 100 km | Extreme |
+
+**City Marathons (3 trails)**
+
+| Trail Name | Distance | Difficulty |
+|------------|----------|------------|
+| Tokyo Marathon | 42.2 km | Hard |
+| Boston Marathon | 42.2 km | Extreme |
+| Berlin Marathon | 42.2 km | Hard |
 
 #### Trail Data Structure
 
@@ -162,18 +205,42 @@ interface Landmark {
 
 ### 3.4 Gamification System
 
-#### 3.4.1 Badge Collections
+#### 3.4.1 Monthly Badge System (Recurring)
 
-Six badge collections rewarding different achievements:
+Badges reset each month, encouraging continuous engagement:
 
 | Collection | Focus | Badges |
 |------------|-------|--------|
-| 🚶 Walking Warrior | Total steps accumulated | 9 badges (1K to 1M steps) |
-| 🗺️ Distance Destroyer | Total distance covered | 10 badges (1km to 1000km) |
-| 🔥 Streak Star | Consecutive walking days | Multiple streak tiers |
-| 🏔️ Trail Blazer | Trail completions | Per-trail completion |
-| 🌍 Seasonal Wanderers | Seasonal achievements | Weather/season themed |
-| ⭐ Legendary Life | Special achievements | Rare accomplishments |
+| 🏃 Walking Warriors | Monthly steps | 7 badges (5K to 500K steps) |
+| 🗺️ Distance Destroyers | Monthly distance | 8 badges (5km to 200km) |
+| 🏆 Monthly Master | 10/15 monthly badges | Named per month (e.g., "January Master") |
+| 🎖️ Yearly Champion | All 12 monthly masters | Named per year (e.g., "2026 Champion") |
+| 🏔️ Trail Blazers | Lifetime trail completions | 7 badges (1 to All trails) |
+
+#### Monthly Step Badges
+
+| Badge | Requirement |
+|-------|-------------|
+| First Steps | 5,000 steps |
+| Getting Moving | 10,000 steps |
+| Stride Master | 25,000 steps |
+| Step Champion | 50,000 steps |
+| Century Walker | 100,000 steps |
+| Step Legend | 250,000 steps |
+| Step Titan | 500,000 steps |
+
+#### Monthly Distance Badges
+
+| Badge | Requirement |
+|-------|-------------|
+| 5K Explorer | 5 km |
+| 10K Traveler | 10 km |
+| Half Marathon | 21 km |
+| Marathon Master | 42 km |
+| Ultra Runner | 50 km |
+| Century Seeker | 100 km |
+| Distance King | 150 km |
+| Distance Demon | 200 km |
 
 #### Badge Unlock Conditions
 
@@ -183,7 +250,7 @@ interface Badge {
   name: string;
   description: string;
   icon: string; // Emoji
-  conditionType: 'TOTAL_STEPS' | 'TOTAL_DISTANCE' | 'STREAK' | 'TRAIL_COMPLETE' | 'SEASON' | 'MONTH';
+  conditionType: 'MONTHLY_STEPS' | 'MONTHLY_DISTANCE' | 'TRAILS_COMPLETED' | 'MONTHLY_MASTER' | 'YEARLY_CHAMPION';
   conditionValue: number;
   collection: string;
 }
@@ -294,13 +361,15 @@ interface NotificationSettings {
 
 ### 4.4 Achievements Screen (`achievements.tsx`)
 
-**Primary Purpose:** Badge collection and gamification rewards.
+**Primary Purpose:** Monthly badge progress and gamification rewards.
 
 | Section | Content |
 |---------|---------|
-| Summary Stats | Total badges earned / available |
-| Collections | Grouped badges by category |
-| Badge Cards | Icon, name, description, unlock status |
+| Monthly Header | Current month, badges earned (X/15), progress to Monthly Master |
+| Step Badges | Horizontal carousel with progress bars |
+| Distance Badges | Horizontal carousel with progress bars |
+| Trail Badges | Lifetime achievements section |
+| Yearly Progress | Progress toward Yearly Champion |
 
 ---
 
@@ -336,15 +405,14 @@ interface NotificationSettings {
 
 ## 6. Data Persistence
 
-### 6.1 Local Storage Keys
+### 6.1 Cloud Storage (Firebase Firestore)
 
-| Key | Purpose |
-|-----|---------|
-| `stridr_users_db` | User accounts database |
-| `stridr_current_session` | Active user session |
-| `user_progress_{userId}` | User's trail progress |
-| `daily_logs_{userId}` | Historical step data |
-| `preferences` | User settings |
+| Collection | Document | Purpose |
+|------------|----------|----------|
+| `userProgress` | `{userId}` | User's trail and badge progress |
+| `dailyLogs/{userId}` | `logs/{date}` | Historical step data |
+| `preferences` | `{userId}` | User settings |
+| `users` | `{userId}` | User profile data |
 
 ### 6.2 Data Flow
 
@@ -353,7 +421,7 @@ graph TD
     A[Device Pedometer] -->|Steps| B[StepService]
     B --> C[GameContext]
     C --> D[StorageService]
-    D --> E[AsyncStorage]
+    D --> E[Firebase Firestore]
     C --> F[BadgeService]
     C --> G[StatsService]
     F --> H[NotificationService]
@@ -379,9 +447,8 @@ graph TD
 
 ### 8.1 Data Handling
 
-- All user data stored locally on device (AsyncStorage)
-- No cloud backend – fully offline capable
-- Passwords stored in local DB (simple implementation for MVP)
+- User data stored in Firebase Firestore (cloud-synced)
+- Firebase Authentication for secure login
 - GDPR-compliant: Delete Account removes all data
 - Motion data only used for step counting (disclosed in app)
 
@@ -437,4 +504,4 @@ graph TD
 
 ---
 
-*This document describes the functional design of Stridr v1.0.0*
+*This document describes the functional design of Stridr v1.1.0*
