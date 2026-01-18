@@ -10,6 +10,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { GameProvider } from '../src/context/GameContext';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
+import { SubscriptionProvider, useSubscription } from '../src/context/SubscriptionContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -19,27 +20,38 @@ import { ToastProvider } from '../src/context/ToastContext';
 import { logger } from '../src/services/LogService';
 
 const ProtectedLayout = () => {
-    const { user, isLoading } = useAuth();
+    const { user, isLoading: isAuthLoading } = useAuth();
+    const { isPro, isLoading: isSubLoading } = useSubscription();
     const { preferences } = usePreferences();
     const router = useRouter();
     const segments = useSegments();
 
+    const isLoading = isAuthLoading || isSubLoading;
+
     useEffect(() => {
-        logger.info('App Launched');
+        logger.info('App Launched - Checking Auth and Sub State');
         if (isLoading) return;
 
         const inAuthGroup = segments[0] === 'login' || segments[0] === 'signup';
+        const inPaywall = segments[0] === 'paywall';
 
         if (!user && !inAuthGroup) {
-            // Redirect to login
+            // Not logged in, and not in auth group -> Go to login
             router.replace('/login');
-        } else if (user && inAuthGroup) {
-            // Redirect back to home
-            router.replace('/(tabs)');
+        } else if (user) {
+            // Logged in
+            if (inAuthGroup) {
+                // User just logged in - go to home (free users see locked features)
+                router.replace('/(tabs)');
+            } else if (isPro && inPaywall) {
+                // Logged in, is pro, but on paywall -> Go to home
+                router.replace('/(tabs)');
+            }
+            // Free users can access app normally - they just see locked premium features
         }
-    }, [user, isLoading, segments]);
+    }, [user, isPro, isLoading, segments]);
 
-    if (isLoading) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" /></View>;
+    if (isLoading) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}><ActivityIndicator size="large" color="#FFD700" /></View>;
 
     return (
         <PreferencesProvider>
@@ -49,10 +61,10 @@ const ProtectedLayout = () => {
                         <Stack.Screen name="(tabs)" />
                         <Stack.Screen name="login" />
                         <Stack.Screen name="signup" />
+                        <Stack.Screen name="paywall" options={{ gestureEnabled: false }} />
                         <Stack.Screen name="trail/[id]" />
                         <Stack.Screen name="edit-profile" />
                         <Stack.Screen name="my-dashboard" />
-                        <Stack.Screen name="preferences" />
                     </Stack>
                     <StatusBar style={preferences.theme === 'dark' ? 'light' : 'dark'} />
                 </ToastProvider>
@@ -65,7 +77,9 @@ export default function RootLayout() {
     return (
         <SafeAreaProvider>
             <AuthProvider>
-                <ProtectedLayout />
+                <SubscriptionProvider>
+                    <ProtectedLayout />
+                </SubscriptionProvider>
             </AuthProvider>
         </SafeAreaProvider>
     );

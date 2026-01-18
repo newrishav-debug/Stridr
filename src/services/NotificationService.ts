@@ -42,7 +42,7 @@ export const NotificationService = {
      */
     async requestPermissions(): Promise<boolean> {
         if (!Device.isDevice) {
-            console.log('Push notifications require a physical device');
+            if (__DEV__) console.log('Push notifications require a physical device');
             return false;
         }
 
@@ -55,7 +55,7 @@ export const NotificationService = {
         }
 
         if (finalStatus !== 'granted') {
-            console.log('Failed to get push notification permissions');
+            if (__DEV__) console.log('Failed to get push notification permissions');
             return false;
         }
 
@@ -94,7 +94,7 @@ export const NotificationService = {
                     minute: 0,
                 },
             });
-            console.log('Daily reminder scheduled:', identifier);
+            if (__DEV__) console.log('Daily reminder scheduled:', identifier);
             return identifier;
         } catch (error) {
             console.error('Failed to schedule daily reminder:', error);
@@ -194,7 +194,7 @@ export const NotificationService = {
                 stopOnTerminate: false,
                 startOnBoot: true,
             });
-            console.log('Inactivity check task registered');
+            if (__DEV__) console.log('Inactivity check task registered');
         } catch (error) {
             console.error('Failed to register inactivity check:', error);
         }
@@ -206,7 +206,7 @@ export const NotificationService = {
     async unregisterInactivityCheck(): Promise<void> {
         try {
             await BackgroundFetch.unregisterTaskAsync(INACTIVITY_CHECK_TASK);
-            console.log('Inactivity check task unregistered');
+            if (__DEV__) console.log('Inactivity check task unregistered');
         } catch (error) {
             console.error('Failed to unregister inactivity check:', error);
         }

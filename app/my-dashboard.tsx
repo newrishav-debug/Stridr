@@ -62,15 +62,13 @@ export default function MyDashboardScreen() {
     const monthlyProgress = progress?.monthlyProgress;
     const monthlyUnlockedCount = monthlyProgress?.unlockedBadgeIds.length || 0;
 
-    // Calculate TOTAL lifetime badges
-    const pastMonthsCount = (progress?.pastMonths || []).reduce((acc, pm) => acc + pm.unlockedBadgeIds.length, 0);
-    const trailBadgesCount = (progress?.trailBadges || []).length;
-    // Count master badges from past years/months
-    const masterBadgesCount = (progress?.yearlyProgress || []).reduce((acc, yp) => acc + yp.monthlyBadgesEarned.length + (yp.yearlyBadgeEarned ? 1 : 0), 0);
-
-    // Total badges = Current Month + Past Months Specifics (if we count them singly) + Trail + Masters
-    // Note: Past months specific badges are now archived, so we count them!
-    const totalBadgesEarned = monthlyUnlockedCount + pastMonthsCount + trailBadgesCount + masterBadgesCount;
+    // Calculate TOTAL lifetime badges - memoized to avoid recalculation on every render
+    const totalBadgesEarned = useMemo(() => {
+        const pastMonthsCount = (progress?.pastMonths || []).reduce((acc, pm) => acc + pm.unlockedBadgeIds.length, 0);
+        const trailBadgesCount = (progress?.trailBadges || []).length;
+        const masterBadgesCount = (progress?.yearlyProgress || []).reduce((acc, yp) => acc + yp.monthlyBadgesEarned.length + (yp.yearlyBadgeEarned ? 1 : 0), 0);
+        return monthlyUnlockedCount + pastMonthsCount + trailBadgesCount + masterBadgesCount;
+    }, [progress, monthlyUnlockedCount]);
 
     const badgesRemaining = Math.max(0, MONTHLY_MASTER_REQUIREMENT - monthlyUnlockedCount);
     const currentMonth = new Date().getMonth() + 1;

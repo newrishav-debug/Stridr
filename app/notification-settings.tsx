@@ -10,6 +10,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { usePreferences, useTheme, ReminderTime } from '../src/context/PreferencesContext';
+import { useSubscription } from '../src/context/SubscriptionContext';
 import { NotificationService, REMINDER_TIMES } from '../src/services/NotificationService';
 import { useEffect, useState } from 'react';
 import {
@@ -21,12 +22,15 @@ import {
     Flag,
     MapPin,
     AlertCircle,
-    BellOff
+    BellOff,
+    Lock
 } from 'lucide-react-native';
+import { PaywallModal } from '../src/components/PaywallModal';
 
 export default function NotificationSettingsScreen() {
     const router = useRouter();
     const theme = useTheme();
+    const { isPro } = useSubscription();
     const {
         preferences,
         setNotificationsEnabled,
@@ -34,6 +38,7 @@ export default function NotificationSettingsScreen() {
     } = usePreferences();
 
     const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+    const [paywallVisible, setPaywallVisible] = useState(false);
 
     const { notificationsEnabled, notificationSettings } = preferences;
 
@@ -113,31 +118,60 @@ export default function NotificationSettingsScreen() {
         value: boolean,
         onToggle: (value: boolean) => void,
         iconBgColor: string,
-        disabled: boolean = false
-    ) => (
-        <View style={[styles.row, disabled && styles.rowDisabled]}>
-            <View style={styles.rowLeft}>
-                <View style={[styles.iconBox, { backgroundColor: iconBgColor }]}>
-                    {icon}
+        disabled: boolean = false,
+        isPremiumLocked: boolean = false
+    ) => {
+        const isLocked = isPremiumLocked && !isPro;
+        const isDisabled = disabled || isLocked;
+
+        const handlePress = () => {
+            if (isLocked) {
+                setPaywallVisible(true);
+            }
+        };
+
+        return (
+            <TouchableOpacity
+                style={[styles.row, isDisabled && styles.rowDisabled]}
+                onPress={handlePress}
+                activeOpacity={isLocked ? 0.7 : 1}
+                disabled={!isLocked}
+            >
+                <View style={styles.rowLeft}>
+                    <View style={[styles.iconBox, { backgroundColor: iconBgColor }]}>
+                        {icon}
+                    </View>
+                    <View style={styles.rowTextContainer}>
+                        <View style={styles.titleRow}>
+                            <Text style={[styles.rowTitle, { color: isDisabled ? theme.textTertiary : theme.text }]}>
+                                {title}
+                            </Text>
+                            {isLocked && (
+                                <View style={styles.premiumBadge}>
+                                    <Lock size={10} color="#B8860B" />
+                                    <Text style={styles.premiumBadgeText}>PRO</Text>
+                                </View>
+                            )}
+                        </View>
+                        <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>
+                            {subtitle}
+                        </Text>
+                    </View>
                 </View>
-                <View style={styles.rowTextContainer}>
-                    <Text style={[styles.rowTitle, { color: disabled ? theme.textTertiary : theme.text }]}>
-                        {title}
-                    </Text>
-                    <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>
-                        {subtitle}
-                    </Text>
-                </View>
-            </View>
-            <Switch
-                value={value}
-                onValueChange={onToggle}
-                trackColor={{ false: theme.border, true: iconBgColor }}
-                thumbColor="white"
-                disabled={disabled}
-            />
-        </View>
-    );
+                {isLocked ? (
+                    <Lock size={20} color={theme.textTertiary} />
+                ) : (
+                    <Switch
+                        value={value}
+                        onValueChange={onToggle}
+                        trackColor={{ false: theme.border, true: iconBgColor }}
+                        thumbColor="white"
+                        disabled={isDisabled}
+                    />
+                )}
+            </TouchableOpacity>
+        );
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -193,11 +227,12 @@ export default function NotificationSettingsScreen() {
                             notificationSettings.dailyReminder,
                             handleDailyReminderToggle,
                             '#8B5CF6',
-                            !notificationsEnabled
+                            !notificationsEnabled,
+                            true
                         )}
 
-                        {/* Time Picker */}
-                        {notificationsEnabled && notificationSettings.dailyReminder && (
+                        {/* Time Picker - Only for Pro users */}
+                        {isPro && notificationsEnabled && notificationSettings.dailyReminder && (
                             <View style={[styles.timePickerContainer, { borderTopColor: theme.border }]}>
                                 <Text style={[styles.timePickerLabel, { color: theme.textSecondary }]}>
                                     Reminder Time
@@ -244,7 +279,8 @@ export default function NotificationSettingsScreen() {
                             notificationSettings.goalAchievement,
                             (v) => updateNotificationSetting('goalAchievement', v),
                             '#10B981',
-                            !notificationsEnabled
+                            !notificationsEnabled,
+                            true
                         )}
 
                         <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -257,7 +293,8 @@ export default function NotificationSettingsScreen() {
                             notificationSettings.badgeUnlock,
                             (v) => updateNotificationSetting('badgeUnlock', v),
                             '#F59E0B',
-                            !notificationsEnabled
+                            !notificationsEnabled,
+                            true
                         )}
 
                         <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -270,7 +307,8 @@ export default function NotificationSettingsScreen() {
                             notificationSettings.milestone,
                             (v) => updateNotificationSetting('milestone', v),
                             '#3B82F6',
-                            !notificationsEnabled
+                            !notificationsEnabled,
+                            true
                         )}
 
                         <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -283,7 +321,8 @@ export default function NotificationSettingsScreen() {
                             notificationSettings.landmarkReached,
                             (v) => updateNotificationSetting('landmarkReached', v),
                             '#06B6D4',
-                            !notificationsEnabled
+                            !notificationsEnabled,
+                            true
                         )}
 
                         <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -296,13 +335,20 @@ export default function NotificationSettingsScreen() {
                             notificationSettings.inactivityNudge,
                             handleInactivityToggle,
                             '#EF4444',
-                            !notificationsEnabled
+                            !notificationsEnabled,
+                            true
                         )}
                     </View>
                 </View>
 
                 <View style={{ height: 40 }} />
             </ScrollView>
+
+            <PaywallModal
+                visible={paywallVisible}
+                onClose={() => setPaywallVisible(false)}
+                feature="notifications"
+            />
         </View>
     );
 }
@@ -450,5 +496,25 @@ const styles = StyleSheet.create({
     },
     timeButtonTime: {
         fontSize: 11,
+    },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    premiumBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 215, 0, 0.15)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+        gap: 3,
+    },
+    premiumBadgeText: {
+        fontSize: 9,
+        fontWeight: 'bold',
+        color: '#B8860B',
+        letterSpacing: 0.5,
     },
 });

@@ -11,16 +11,26 @@ import { DashboardStatsService } from './DashboardStatsService';
 import { UserProgress } from '../types';
 import { TRAILS } from '../const/trails';
 
+// Helper to create a date string in YYYY-MM-DD format
+const formatDate = (date: Date): string => date.toISOString().split('T')[0];
+
+// Helper to get a date N days ago from today
+const daysAgo = (n: number): string => {
+    const date = new Date();
+    date.setDate(date.getDate() - n);
+    return formatDate(date);
+};
+
 describe('DashboardStatsService', () => {
-    // Mock history data
+    // Mock history data using dynamic dates relative to today
     const mockHistory = [
-        { date: '2026-01-08', steps: 8000 },  // Wednesday, last week
-        { date: '2026-01-09', steps: 7500 },  // Thursday, last week
-        { date: '2026-01-10', steps: 9000 },  // Friday, last week
-        { date: '2026-01-11', steps: 6000 },  // Saturday, last week
-        { date: '2026-01-12', steps: 10000 }, // Sunday, this week
-        { date: '2026-01-13', steps: 5000 },  // Monday, this week
-        { date: '2026-01-14', steps: 7000 },  // Tuesday, this week (today)
+        { date: daysAgo(6), steps: 8000 },
+        { date: daysAgo(5), steps: 7500 },
+        { date: daysAgo(4), steps: 9000 },
+        { date: daysAgo(3), steps: 6000 },
+        { date: daysAgo(2), steps: 10000 },
+        { date: daysAgo(1), steps: 5000 },
+        { date: daysAgo(0), steps: 7000 },  // today
     ];
 
     describe('getWeeklyStats', () => {
@@ -71,10 +81,16 @@ describe('DashboardStatsService', () => {
         });
 
         it('should handle case where all days meet goal', () => {
+            // Create 14 days of history where all days meet the goal
+            const fullHistory = Array.from({ length: 14 }, (_, i) => ({
+                date: daysAgo(13 - i), // From 13 days ago to today
+                steps: 2000 // All above lowGoal of 1000
+            }));
             const lowGoal = 1000;
-            const result = DashboardStatsService.getGoalAchievementRate(mockHistory, lowGoal);
+            const result = DashboardStatsService.getGoalAchievementRate(fullHistory, lowGoal);
 
             expect(result.rate).toBe(100);
+            expect(result.daysHit).toBe(14);
         });
     });
 
@@ -83,7 +99,7 @@ describe('DashboardStatsService', () => {
             const result = DashboardStatsService.getPersonalRecords(mockHistory);
 
             expect(result.bestDay.steps).toBe(10000);
-            expect(result.bestDay.date).toBe('2026-01-12');
+            expect(result.bestDay.date).toBe(daysAgo(2)); // 10000 steps was 2 days ago
         });
 
         it('should return zeros for empty history', () => {

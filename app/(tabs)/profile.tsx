@@ -11,12 +11,18 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Image
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import { usePreferences, useTheme } from '../../src/context/PreferencesContext';
+import { useSubscription } from '../../src/context/SubscriptionContext';
 import { useGame } from '../../src/context/GameContext';
 import { DebugMenu } from '../../src/components/DebugMenu';
 import { useState } from 'react';
 import * as MailComposer from 'expo-mail-composer';
 import * as Sharing from 'expo-sharing';
 import { logger } from '../../src/services/LogService';
+import { PaywallModal } from '../../src/components/PaywallModal';
+import { deleteUser } from 'firebase/auth';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { auth, db } from '../../src/config/firebase';
+import { FREE_DEFAULT_DAILY_GOAL } from '../../src/const/subscription';
 
 import {
     CircleUser,
@@ -38,7 +44,9 @@ import {
     FileText,
     Heart,
     X,
-    AlertTriangle
+    AlertTriangle,
+    Lock,
+    Crown
 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -47,6 +55,7 @@ export default function ProfileScreen() {
     const router = useRouter();
     const { user, logout } = useAuth();
     const { progress, debug } = useGame();
+    const { isPro } = useSubscription();
     const {
         preferences,
         setDistanceUnit,
@@ -61,6 +70,8 @@ export default function ProfileScreen() {
     const [isGoalModalVisible, setIsGoalModalVisible] = useState(false);
     const [goalInput, setGoalInput] = useState(preferences.dailyGoal.toString());
     const [strideInput, setStrideInput] = useState(preferences.strideLength.toString());
+    const [paywallVisible, setPaywallVisible] = useState(false);
+    const [paywallFeature, setPaywallFeature] = useState<'goal' | 'export' | 'dashboard' | 'notifications' | 'darkmode'>('goal');
 
     // Derived state
     const useKilometers = preferences.distanceUnit === 'km';
@@ -80,6 +91,11 @@ export default function ProfileScreen() {
     };
 
     const openGoalModal = () => {
+        if (!isPro) {
+            setPaywallFeature('goal');
+            setPaywallVisible(true);
+            return;
+        }
         setGoalInput(preferences.dailyGoal.toString());
         setIsGoalModalVisible(true);
     };
@@ -95,6 +111,11 @@ export default function ProfileScreen() {
     };
 
     const handleExportData = () => {
+        if (!isPro) {
+            setPaywallFeature('export');
+            setPaywallVisible(true);
+            return;
+        }
         Alert.alert('Export Data', 'Your walking history is being prepared. You will receive an email shortly.', [
             { text: 'OK' }
         ]);
@@ -111,14 +132,33 @@ export default function ProfileScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            // Clear all game progress data (GDPR compliance)
+                            const currentUser = auth.currentUser;
+                            if (!currentUser) {
+                                Alert.alert('Error', 'No user session found.');
+                                return;
+                            }
+
+                            // 1. Clear all game progress data (GDPR compliance)
                             await debug?.resetProgress();
-                            // Log out and clear session
-                            await logout();
-                            // Navigate to login
+
+                            // 2. Delete user document from Firestore
+                            await deleteDoc(doc(db, 'users', currentUser.uid));
+
+                            // 3. Delete Firebase Auth account
+                            await deleteUser(currentUser);
+
+                            // 4. Navigate to login (user is already signed out after deleteUser)
                             router.replace('/login');
-                        } catch (error) {
-                            Alert.alert('Error', 'Failed to delete account. Please try again.');
+                        } catch (error: any) {
+                            // Firebase requires recent authentication for account deletion
+                            if (error.code === 'auth/requires-recent-login') {
+                                Alert.alert(
+                                    'Re-authentication Required',
+                                    'For security, please sign out and sign back in, then try deleting your account again.'
+                                );
+                            } else {
+                                Alert.alert('Error', 'Failed to delete account. Please try again.');
+                            }
                         }
                     }
                 }
@@ -181,19 +221,38 @@ export default function ProfileScreen() {
                 <View style={styles.dashboardSection}>
                     <TouchableOpacity
                         style={[styles.dashboardCard, { backgroundColor: theme.card }]}
-                        onPress={() => router.push('/my-dashboard')}
+                        onPress={() => {
+                            if (isPro) {
+                                router.push('/my-dashboard');
+                            } else {
+                                setPaywallFeature('dashboard');
+                                setPaywallVisible(true);
+                            }
+                        }}
                     >
                         <View style={styles.dashboardContent}>
                             <View style={[styles.dashboardIcon, { backgroundColor: '#8B5CF6' }]}>
                                 <LayoutDashboard size={24} color="white" />
                             </View>
                             <View style={styles.dashboardTextContainer}>
-                                <Text style={[styles.dashboardTitle, { color: theme.text }]}>My Dashboard</Text>
+                                <View style={styles.titleWithBadge}>
+                                    <Text style={[styles.dashboardTitle, { color: theme.text }]}>My Dashboard</Text>
+                                    {!isPro && (
+                                        <View style={styles.proBadge}>
+                                            <Lock size={10} color="#B8860B" />
+                                            <Text style={styles.proBadgeText}>PRO</Text>
+                                        </View>
+                                    )}
+                                </View>
                                 <Text style={[styles.dashboardSubtitle, { color: theme.textSecondary }]}>
                                     Check your daily goals and overall statistics
                                 </Text>
                             </View>
-                            <ChevronRight size={24} color={theme.textTertiary} />
+                            {isPro ? (
+                                <ChevronRight size={24} color={theme.textTertiary} />
+                            ) : (
+                                <Lock size={20} color={theme.textTertiary} />
+                            )}
                         </View>
                     </TouchableOpacity>
                 </View>
@@ -215,14 +274,26 @@ export default function ProfileScreen() {
                                     <View style={[styles.iconBox, { backgroundColor: '#F59E0B' }]}>
                                         <Target size={20} color="white" />
                                     </View>
-                                    <View>
-                                        <Text style={[styles.rowTitle, { color: theme.text }]}>Daily Goal</Text>
+                                    <View style={{ flex: 1 }}>
+                                        <View style={styles.titleWithBadge}>
+                                            <Text style={[styles.rowTitle, { color: theme.text }]}>Daily Goal</Text>
+                                            {!isPro && (
+                                                <View style={styles.proBadge}>
+                                                    <Lock size={10} color="#B8860B" />
+                                                    <Text style={styles.proBadgeText}>PRO</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                         <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>
-                                            {preferences.dailyGoal.toLocaleString()} steps
+                                            {isPro ? `${preferences.dailyGoal.toLocaleString()} steps` : `${FREE_DEFAULT_DAILY_GOAL.toLocaleString()} steps (fixed)`}
                                         </Text>
                                     </View>
                                 </View>
-                                <ChevronRight size={20} color={theme.textTertiary} />
+                                {isPro ? (
+                                    <ChevronRight size={20} color={theme.textTertiary} />
+                                ) : (
+                                    <Lock size={18} color={theme.textTertiary} />
+                                )}
                             </TouchableOpacity>
 
                             <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -275,26 +346,48 @@ export default function ProfileScreen() {
 
                             <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-                            {/* Theme */}
-                            <View style={styles.row}>
+                            {/* Theme - Locked for free users */}
+                            <TouchableOpacity
+                                style={styles.row}
+                                onPress={() => {
+                                    if (isPro) {
+                                        setTheme(darkMode ? 'light' : 'dark');
+                                    } else {
+                                        setPaywallFeature('darkmode');
+                                        setPaywallVisible(true);
+                                    }
+                                }}
+                            >
                                 <View style={styles.rowLeft}>
                                     <View style={[styles.iconBox, { backgroundColor: '#6366F1' }]}>
                                         <Moon size={20} color="white" />
                                     </View>
-                                    <View>
-                                        <Text style={[styles.rowTitle, { color: theme.text }]}>Dark Mode</Text>
+                                    <View style={{ flex: 1 }}>
+                                        <View style={styles.titleWithBadge}>
+                                            <Text style={[styles.rowTitle, { color: theme.text }]}>Dark Mode</Text>
+                                            {!isPro && (
+                                                <View style={styles.proBadge}>
+                                                    <Lock size={10} color="#B8860B" />
+                                                    <Text style={styles.proBadgeText}>PRO</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                         <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>
                                             {darkMode ? 'On' : 'Off'}
                                         </Text>
                                     </View>
                                 </View>
-                                <Switch
-                                    value={darkMode}
-                                    onValueChange={(v) => setTheme(v ? 'dark' : 'light')}
-                                    trackColor={{ false: theme.border, true: '#6366F1' }}
-                                    thumbColor="white"
-                                />
-                            </View>
+                                {isPro ? (
+                                    <Switch
+                                        value={darkMode}
+                                        onValueChange={(v) => setTheme(v ? 'dark' : 'light')}
+                                        trackColor={{ false: theme.border, true: '#6366F1' }}
+                                        thumbColor="white"
+                                    />
+                                ) : (
+                                    <Lock size={18} color={theme.textTertiary} />
+                                )}
+                            </TouchableOpacity>
                         </View>
                     </View>
 
@@ -349,8 +442,21 @@ export default function ProfileScreen() {
                                     <View style={[styles.iconBox, { backgroundColor: '#14B8A6' }]}>
                                         <Download size={20} color="white" />
                                     </View>
-                                    <Text style={[styles.rowTitle, { color: theme.text }]}>Export Data</Text>
+                                    <View style={styles.titleWithBadge}>
+                                        <Text style={[styles.rowTitle, { color: theme.text }]}>Export Data</Text>
+                                        {!isPro && (
+                                            <View style={styles.proBadge}>
+                                                <Lock size={10} color="#B8860B" />
+                                                <Text style={styles.proBadgeText}>PRO</Text>
+                                            </View>
+                                        )}
+                                    </View>
                                 </View>
+                                {isPro ? (
+                                    <ChevronRight size={20} color={theme.textTertiary} />
+                                ) : (
+                                    <Lock size={18} color={theme.textTertiary} />
+                                )}
                             </TouchableOpacity>
 
                             <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -551,6 +657,12 @@ export default function ProfileScreen() {
                     </View>
                 </TouchableWithoutFeedback>
             </Modal>
+
+            <PaywallModal
+                visible={paywallVisible}
+                onClose={() => setPaywallVisible(false)}
+                feature={paywallFeature}
+            />
         </>
     );
 }
@@ -844,5 +956,25 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
         fontSize: 16,
+    },
+    titleWithBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    proBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 215, 0, 0.15)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+        gap: 3,
+    },
+    proBadgeText: {
+        fontSize: 9,
+        fontWeight: 'bold',
+        color: '#B8860B',
+        letterSpacing: 0.5,
     },
 });

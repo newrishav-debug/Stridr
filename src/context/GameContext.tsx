@@ -48,7 +48,7 @@ const checkAndResetMonthlyProgress = (currentProgress: MonthlyProgress | undefin
     const currentMonth = now.getMonth() + 1; // 1-12
 
     if (!currentProgress || currentProgress.year !== currentYear || currentProgress.month !== currentMonth) {
-        console.log(`[GameContext] New month detected: ${currentMonth}/${currentYear}. Resetting monthly progress.`);
+        if (__DEV__) console.log(`[GameContext] New month detected: ${currentMonth}/${currentYear}. Resetting monthly progress.`);
         return {
             newCurrent: BadgeService.createNewMonthlyProgress(currentYear, currentMonth),
             toArchive: currentProgress || null
@@ -115,7 +115,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Migration: Ensure stats object exists
         if (!p.stats) {
-            console.log('Migrating: Adding stats object to UserProgress');
+            if (__DEV__) console.log('Migrating: Adding stats object to UserProgress');
             p.stats = {
                 totalStepsLifetime: p.totalStepsValid + (p.completedTrails?.reduce((acc: number, t: any) => acc + (t.totalSteps || 0), 0) || 0),
                 totalDistanceMetersLifetime: p.currentDistanceMeters,
@@ -125,7 +125,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Migration: Initialize monthly progress if missing
         if (!p.monthlyProgress) {
-            console.log('Migrating: Adding monthlyProgress to UserProgress');
+            if (__DEV__) console.log('Migrating: Adding monthlyProgress to UserProgress');
             p.monthlyProgress = BadgeService.createNewMonthlyProgress(now.getFullYear(), now.getMonth() + 1);
         }
 
@@ -143,7 +143,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!p.completedTrails) {
             p.completedTrails = [];
         } else if (p.completedTrails.length > 0 && typeof p.completedTrails[0] === 'string') {
-            console.log('Migrating completedTrails from strings to objects');
+            if (__DEV__) console.log('Migrating completedTrails from strings to objects');
             p.completedTrails = (p.completedTrails as any[]).map((id: string) => ({
                 trailId: id,
                 completedDate: new Date().toISOString(),
@@ -186,12 +186,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const HOUR_IN_MS = 60 * 60 * 1000;
         const syncInterval = setInterval(() => {
-            console.log('[GameContext] Automatic hourly sync triggered');
+            if (__DEV__) console.log('[GameContext] Automatic hourly sync triggered');
             sync();
         }, HOUR_IN_MS);
 
         return () => {
-            console.log('[GameContext] Cleaning up sync interval');
+            if (__DEV__) console.log('[GameContext] Cleaning up sync interval');
             clearInterval(syncInterval);
         };
     }, [user]);
@@ -202,7 +202,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const subscription = AppState.addEventListener('change', (nextAppState) => {
             if (nextAppState === 'active') {
-                console.log('[GameContext] App resumed - triggering sync');
+                if (__DEV__) console.log('[GameContext] App resumed - triggering sync');
                 sync();
             }
         });
@@ -264,7 +264,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const permitted = await StepService.requestPermissions();
             if (!permitted) {
-                console.log('Step permission denied during sync');
+                if (__DEV__) console.log('Step permission denied during sync');
                 return;
             }
 

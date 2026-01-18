@@ -12,12 +12,16 @@ import { useState } from 'react';
 
 import { INDIAN_TRAILS, CLASSIC_MARATHONS, CITY_MARATHONS } from '../../src/const/trails';
 import { useGame } from '../../src/context/GameContext';
+import { useSubscription } from '../../src/context/SubscriptionContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Trail } from '../../src/types';
 import { useRouter } from 'expo-router';
 import { useTheme, usePreferences } from '../../src/context/PreferencesContext';
 import { getDistanceValue, getDistanceUnit } from '../../src/utils/conversion';
 import { GoalPromptModal } from '../../src/components/GoalPromptModal';
+import { PaywallModal } from '../../src/components/PaywallModal';
+import { isTrailFree } from '../../src/const/subscription';
+import { Lock } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.55;
@@ -25,15 +29,22 @@ const CARD_SPACING = 16;
 
 export default function TrailsScreen() {
     const { progress } = useGame();
+    const { isPro } = useSubscription();
     const theme = useTheme();
     const router = useRouter();
     const { preferences } = usePreferences();
     const { selectTrail } = useGame();
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedTrailIdForModal, setSelectedTrailIdForModal] = useState<string | null>(null);
+    const [paywallVisible, setPaywallVisible] = useState(false);
 
     const handleTrailPress = (trailId: string) => {
+        // Allow viewing trail details even if locked
         router.push(`/trail/${trailId}`);
+    };
+
+    const handleLockedTrailPress = () => {
+        setPaywallVisible(true);
     };
 
     const handleStartPress = (trailId: string) => {
@@ -78,7 +89,7 @@ export default function TrailsScreen() {
 
     const renderTrailCard = (trail: Trail, index: number, isFirstInSection: boolean) => {
         const isActive = progress?.selectedTrailId === trail.id;
-
+        const isLocked = !isPro && !isTrailFree(trail.id);
 
 
         return (
@@ -101,6 +112,16 @@ export default function TrailsScreen() {
                     colors={['transparent', 'rgba(0,0,0,0.9)']}
                     style={styles.gradient}
                 />
+
+                {/* Lock Overlay for Premium Trails */}
+                {isLocked && (
+                    <View style={styles.lockOverlay}>
+                        <View style={styles.lockBadge}>
+                            <Lock size={16} color="white" />
+                            <Text style={styles.lockBadgeText}>PREMIUM</Text>
+                        </View>
+                    </View>
+                )}
 
                 <View style={styles.cardContent}>
                     {isActive && (
@@ -129,15 +150,35 @@ export default function TrailsScreen() {
                     </View>
 
                     {!isActive && (
-                        <TouchableOpacity
-                            style={[styles.selectButton, { backgroundColor: trail.color }]}
-                            onPress={(e) => {
-                                e.stopPropagation();
-                                handleStartPress(trail.id);
-                            }}
-                        >
-                            <Text style={styles.selectButtonText}>Start Trail</Text>
-                        </TouchableOpacity>
+                        isLocked ? (
+                            <TouchableOpacity
+                                style={styles.lockedButtonWrapper}
+                                onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleLockedTrailPress();
+                                }}
+                            >
+                                <LinearGradient
+                                    colors={['rgba(0, 0, 0, 0.5)', 'rgba(0, 0, 0, 0.5)']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.lockedButtonGradient}
+                                >
+                                    <Lock size={16} color="white" />
+                                    <Text style={styles.selectButtonText}>Unlock Premium</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity
+                                style={[styles.selectButton, { backgroundColor: trail.color }]}
+                                onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleStartPress(trail.id);
+                                }}
+                            >
+                                <Text style={styles.selectButtonText}>Start Trail</Text>
+                            </TouchableOpacity>
+                        )
                     )}
                 </View>
             </TouchableOpacity>
@@ -219,6 +260,12 @@ export default function TrailsScreen() {
                 onCancel={handleModalCancel}
                 onStart={handleModalStart}
             />
+
+            <PaywallModal
+                visible={paywallVisible}
+                onClose={() => setPaywallVisible(false)}
+                feature="trails"
+            />
         </ScrollView>
     );
 }
@@ -263,7 +310,7 @@ const styles = StyleSheet.create({
     },
     card: {
         width: CARD_WIDTH,
-        height: 320,
+        height: 380,
         marginLeft: CARD_SPACING,
         borderRadius: 24,
         backgroundColor: 'white',
@@ -294,7 +341,8 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        padding: 24,
+        padding: 20,
+        paddingBottom: 24,
     },
     activeBadge: {
         alignSelf: 'flex-start',
@@ -355,11 +403,47 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 12,
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+    },
+    lockedButtonWrapper: {
+        overflow: 'hidden',
+        borderRadius: 12,
+    },
+    lockedButtonGradient: {
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+        alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 8,
     },
     selectButtonText: {
         color: 'white',
         fontSize: 16,
         fontWeight: 'bold',
+    },
+    lockOverlay: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        zIndex: 10,
+    },
+    lockBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 20,
+        gap: 4,
+    },
+    lockBadgeText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
     },
     comingSoonContainer: {
         marginTop: 40,

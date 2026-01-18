@@ -10,10 +10,12 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useGame } from '../../src/context/GameContext';
 import { useAuth } from '../../src/context/AuthContext';
+import { useSubscription } from '../../src/context/SubscriptionContext';
 import { TRAILS } from '../../src/const/trails';
+import { isTrailFree } from '../../src/const/subscription';
 import { getDistanceValue, getDistanceUnit } from '../../src/utils/conversion';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, Footprints, Flame, Award, Mountain, ChevronRight, Target } from 'lucide-react-native';
+import { MapPin, Footprints, Flame, Award, Mountain, ChevronRight, Target, Lock } from 'lucide-react-native';
 import { useTheme, usePreferences } from '../../src/context/PreferencesContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
@@ -22,6 +24,7 @@ import { WeeklyActivityChart } from '../../src/components/WeeklyActivityChart';
 import { NextLandmarkCard } from '../../src/components/NextLandmarkCard';
 import { StepService } from '../../src/services/StepService';
 import { GoalPromptModal } from '../../src/components/GoalPromptModal';
+import { PaywallModal } from '../../src/components/PaywallModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PLACEHOLDER_IMG = { uri: 'https://via.placeholder.com/400x300' };
@@ -31,6 +34,7 @@ const PLACEHOLDER_IMG = { uri: 'https://via.placeholder.com/400x300' };
 export default function HomeScreen() {
     const { progress, selectTrail } = useGame();
     const { user } = useAuth();
+    const { isPro } = useSubscription();
     const theme = useTheme();
     const { preferences } = usePreferences();
     const router = useRouter();
@@ -38,6 +42,8 @@ export default function HomeScreen() {
     const [weeklyHistory, setWeeklyHistory] = useState<{ date: string; steps: number }[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedTrailIdForModal, setSelectedTrailIdForModal] = useState<string | null>(null);
+    const [dashboardPaywallVisible, setDashboardPaywallVisible] = useState(false);
+    const [trailPaywallVisible, setTrailPaywallVisible] = useState(false);
 
     // Refresh step data when the screen gains focus
     useFocusEffect(
@@ -251,15 +257,29 @@ export default function HomeScreen() {
 
             {/* My Dashboard */}
             <View style={{ paddingHorizontal: 24, marginBottom: 12 }}>
-                <Text style={[styles.sectionTitle, { color: theme.text, paddingHorizontal: 0, marginBottom: 0 }]}>
-                    My Dashboard
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={[styles.sectionTitle, { color: theme.text, paddingHorizontal: 0, marginBottom: 0 }]}>
+                        My Dashboard
+                    </Text>
+                    {!isPro && (
+                        <View style={styles.proBadgeSmall}>
+                            <Lock size={10} color="#B8860B" />
+                            <Text style={styles.proBadgeSmallText}>PRO</Text>
+                        </View>
+                    )}
+                </View>
             </View>
 
             {/* Achievements Grid */}
             <TouchableOpacity
                 style={[styles.accomplishmentsCard, { backgroundColor: theme.card }]}
-                onPress={() => router.push('/my-dashboard')}
+                onPress={() => {
+                    if (isPro) {
+                        router.push('/my-dashboard');
+                    } else {
+                        setDashboardPaywallVisible(true);
+                    }
+                }}
                 activeOpacity={0.8}
             >
                 <View style={styles.statsRow}>
@@ -302,7 +322,6 @@ export default function HomeScreen() {
                         </View>
                     </View>
 
-                    {/* Completed Trails */}
                     <View style={[styles.statItem, { backgroundColor: theme.backgroundTertiary }]}>
                         <View style={[styles.statIcon, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
                             <Mountain size={20} color="#8B5CF6" />
@@ -313,6 +332,16 @@ export default function HomeScreen() {
                         </View>
                     </View>
                 </View>
+
+                {/* Lock Overlay for Dashboard */}
+                {!isPro && (
+                    <View style={styles.dashboardLockOverlay}>
+                        <View style={styles.dashboardLockBadge}>
+                            <Lock size={14} color="white" />
+                            <Text style={styles.dashboardLockText}>Tap to unlock detailed insights</Text>
+                        </View>
+                    </View>
+                )}
             </TouchableOpacity>
 
             {/* Start Your Journey Section */}
@@ -332,65 +361,95 @@ export default function HomeScreen() {
                     snapToInterval={SCREEN_WIDTH * 0.7 + 12}
                     snapToAlignment="start"
                 >
-                    {availableTrails.map((trail, index) => (
-                        <TouchableOpacity
-                            key={trail.id}
-                            style={[
-                                styles.trailCard,
-                                { backgroundColor: theme.card },
-                                index === 0 && styles.firstTrailCard
-                            ]}
-                            onPress={() => router.push(`/trail/${trail.id}`)}
-                            activeOpacity={0.9}
-                        >
-                            <Image
-                                source={trail.image || PLACEHOLDER_IMG}
-                                style={styles.trailCardImage}
-                                resizeMode="cover"
-                            />
-                            <LinearGradient
-                                colors={['transparent', 'rgba(0,0,0,0.8)']}
-                                style={styles.trailCardGradient}
-                            />
+                    {availableTrails.map((trail, index) => {
+                        const isLocked = !isPro && !isTrailFree(trail.id);
+                        return (
+                            <TouchableOpacity
+                                key={trail.id}
+                                style={[
+                                    styles.trailCard,
+                                    { backgroundColor: theme.card },
+                                    index === 0 && styles.firstTrailCard
+                                ]}
+                                onPress={() => {
+                                    if (isLocked) {
+                                        setTrailPaywallVisible(true);
+                                    } else {
+                                        router.push(`/trail/${trail.id}`);
+                                    }
+                                }}
+                                activeOpacity={0.9}
+                            >
+                                <Image
+                                    source={trail.image || PLACEHOLDER_IMG}
+                                    style={styles.trailCardImage}
+                                    resizeMode="cover"
+                                />
+                                <LinearGradient
+                                    colors={['transparent', 'rgba(0,0,0,0.8)']}
+                                    style={styles.trailCardGradient}
+                                />
 
-                            <View style={styles.trailCardContent}>
-                                <Text style={styles.trailCardName} numberOfLines={2}>
-                                    {trail.name}
-                                </Text>
-
-                                <View style={[styles.trailDifficultyBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                                    <Text style={styles.trailDifficultyText}>{trail.difficulty}</Text>
-                                </View>
-
-                                <View style={styles.trailCardStats}>
-                                    <View style={styles.trailCardStat}>
-                                        <MapPin size={14} color="rgba(255,255,255,0.9)" />
-                                        <Text style={styles.trailCardStatText}>
-                                            {getDistanceValue(trail.totalDistanceMeters, preferences.distanceUnit).toFixed(0)} {getDistanceUnit(preferences.distanceUnit)}
-                                        </Text>
+                                {/* Lock badge for premium trails */}
+                                {isLocked && (
+                                    <View style={styles.trailLockBadge}>
+                                        <Lock size={12} color="white" />
+                                        <Text style={styles.trailLockBadgeText}>PREMIUM</Text>
                                     </View>
-                                    <View style={styles.trailCardStat}>
-                                        <Mountain size={14} color="rgba(255,255,255,0.9)" />
-                                        <Text style={styles.trailCardStatText}>
-                                            {trail.landmarks.length} landmarks
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                {progress.selectedTrailId !== trail.id && (
-                                    <TouchableOpacity
-                                        style={[styles.quickStartButton, { backgroundColor: trail.color }]}
-                                        onPress={(e) => {
-                                            e.stopPropagation();
-                                            handleQuickStart(trail.id);
-                                        }}
-                                    >
-                                        <Text style={styles.quickStartText}>Start Trail</Text>
-                                    </TouchableOpacity>
                                 )}
-                            </View>
-                        </TouchableOpacity>
-                    ))}
+
+                                <View style={styles.trailCardContent}>
+                                    <Text style={styles.trailCardName} numberOfLines={2}>
+                                        {trail.name}
+                                    </Text>
+
+                                    <View style={[styles.trailDifficultyBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                                        <Text style={styles.trailDifficultyText}>{trail.difficulty}</Text>
+                                    </View>
+
+                                    <View style={styles.trailCardStats}>
+                                        <View style={styles.trailCardStat}>
+                                            <MapPin size={14} color="rgba(255,255,255,0.9)" />
+                                            <Text style={styles.trailCardStatText}>
+                                                {getDistanceValue(trail.totalDistanceMeters, preferences.distanceUnit).toFixed(0)} {getDistanceUnit(preferences.distanceUnit)}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.trailCardStat}>
+                                            <Mountain size={14} color="rgba(255,255,255,0.9)" />
+                                            <Text style={styles.trailCardStatText}>
+                                                {trail.landmarks.length} landmarks
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    {progress.selectedTrailId !== trail.id && (
+                                        isLocked ? (
+                                            <TouchableOpacity
+                                                style={styles.lockedQuickStartButton}
+                                                onPress={(e) => {
+                                                    e.stopPropagation();
+                                                    setTrailPaywallVisible(true);
+                                                }}
+                                            >
+                                                <Lock size={16} color="white" />
+                                                <Text style={styles.quickStartText}>Unlock Premium</Text>
+                                            </TouchableOpacity>
+                                        ) : (
+                                            <TouchableOpacity
+                                                style={[styles.quickStartButton, { backgroundColor: trail.color }]}
+                                                onPress={(e) => {
+                                                    e.stopPropagation();
+                                                    handleQuickStart(trail.id);
+                                                }}
+                                            >
+                                                <Text style={styles.quickStartText}>Start Trail</Text>
+                                            </TouchableOpacity>
+                                        )
+                                    )}
+                                </View>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </ScrollView>
             </View>
 
@@ -449,6 +508,18 @@ export default function HomeScreen() {
                 visible={modalVisible}
                 onCancel={handleModalCancel}
                 onStart={handleModalStart}
+            />
+
+            <PaywallModal
+                visible={dashboardPaywallVisible}
+                onClose={() => setDashboardPaywallVisible(false)}
+                feature="dashboard"
+            />
+
+            <PaywallModal
+                visible={trailPaywallVisible}
+                onClose={() => setTrailPaywallVisible(false)}
+                feature="trails"
             />
         </ScrollView>
     );
@@ -670,8 +741,24 @@ const styles = StyleSheet.create({
     },
     quickStartButton: {
         paddingVertical: 10,
+        paddingHorizontal: 16,
         borderRadius: 10,
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 6,
+    },
+    lockedQuickStartButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 6,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
     },
     quickStartText: {
         color: 'white',
@@ -793,5 +880,60 @@ const styles = StyleSheet.create({
     },
     dailyGoalPercentage: {
         fontSize: 14,
+    },
+    proBadgeSmall: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 215, 0, 0.15)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+    },
+    proBadgeSmallText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#B8860B',
+        letterSpacing: 0.5,
+    },
+    dashboardLockOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingVertical: 10,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        borderBottomLeftRadius: 20,
+        borderBottomRightRadius: 20,
+        alignItems: 'center',
+    },
+    dashboardLockBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    dashboardLockText: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    trailLockBadge: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 20,
+        gap: 4,
+        zIndex: 10,
+    },
+    trailLockBadgeText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
     },
 });

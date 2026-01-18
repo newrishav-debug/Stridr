@@ -10,7 +10,8 @@
  */
 import { View, Text, StyleSheet, ScrollView, FlatList, Dimensions, TouchableOpacity, Modal } from 'react-native';
 import { useGame } from '../../src/context/GameContext';
-import { useLocalSearchParams } from 'expo-router';
+import { useSubscription } from '../../src/context/SubscriptionContext';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import {
     BADGE_COLLECTIONS,
@@ -27,7 +28,7 @@ import {
 import { BadgeService } from '../../src/services/BadgeService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../src/context/PreferencesContext';
-import { Award, Target, MapPin, Trophy, Lock, History, ChevronLeft, Calendar } from 'lucide-react-native';
+import { Award, Target, MapPin, Trophy, Lock, History, ChevronLeft, Calendar, Sparkles } from 'lucide-react-native';
 import { useState } from 'react';
 import { MonthlyProgress } from '../../src/types';
 
@@ -36,6 +37,8 @@ const BADGE_CARD_WIDTH = 140;
 
 export default function AchievementsScreen() {
     const { progress } = useGame();
+    const { isPro } = useSubscription();
+    const router = useRouter();
     const theme = useTheme();
     const params = useLocalSearchParams();
     const [viewingHistory, setViewingHistory] = useState(false);
@@ -292,6 +295,80 @@ export default function AchievementsScreen() {
 
     if (viewingHistory && !selectedHistoryMonth) {
         return renderHistoryList();
+    }
+
+    // If not pro, show locked screen
+    if (!isPro) {
+        return (
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
+                <LinearGradient
+                    colors={['#6B7280', '#4B5563']}
+                    style={styles.headerGradient}
+                >
+                    <View style={styles.headerTopRow}>
+                        <View style={styles.headerTop}>
+                            <Text style={styles.monthIcon}>🏆</Text>
+                            <Text style={styles.title}>Achievements</Text>
+                        </View>
+                    </View>
+                    <Text style={styles.subtitle}>Earn badges by walking!</Text>
+                </LinearGradient>
+
+                <View style={styles.lockedContent}>
+                    <View style={styles.lockIconContainer}>
+                        <Lock size={48} color="#9CA3AF" />
+                    </View>
+                    <Text style={[styles.lockedTitle, { color: theme.text }]}>
+                        Badges are a Premium Feature
+                    </Text>
+                    <Text style={[styles.lockedDescription, { color: theme.textSecondary }]}>
+                        Upgrade to Stridr Pro to unlock achievements, earn badges, and track your walking milestones!
+                    </Text>
+
+                    <View style={styles.lockedFeatures}>
+                        <View style={styles.lockedFeatureRow}>
+                            <Award size={18} color="#F59E0B" />
+                            <Text style={[styles.lockedFeatureText, { color: theme.text }]}>
+                                Monthly step & distance badges
+                            </Text>
+                        </View>
+                        <View style={styles.lockedFeatureRow}>
+                            <MapPin size={18} color="#10B981" />
+                            <Text style={[styles.lockedFeatureText, { color: theme.text }]}>
+                                Trail completion badges
+                            </Text>
+                        </View>
+                        <View style={styles.lockedFeatureRow}>
+                            <Calendar size={18} color="#8B5CF6" />
+                            <Text style={[styles.lockedFeatureText, { color: theme.text }]}>
+                                Monthly Master challenges
+                            </Text>
+                        </View>
+                        <View style={styles.lockedFeatureRow}>
+                            <Trophy size={18} color="#EF4444" />
+                            <Text style={[styles.lockedFeatureText, { color: theme.text }]}>
+                                Yearly Champion achievement
+                            </Text>
+                        </View>
+                    </View>
+
+                    <TouchableOpacity
+                        style={styles.unlockButton}
+                        onPress={() => router.push('/paywall')}
+                    >
+                        <LinearGradient
+                            colors={['#FFD700', '#FFA500']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.unlockButtonGradient}
+                        >
+                            <Sparkles size={20} color="#000" />
+                            <Text style={styles.unlockButtonText}>Upgrade to Premium</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
     }
 
     return (
@@ -642,6 +719,73 @@ const styles = StyleSheet.create({
     },
     statLabel: {
         fontSize: 10,
+    },
+    // Locked state styles
+    lockedContent: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    lockIconContainer: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    lockedTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginBottom: 12,
+    },
+    lockedDescription: {
+        fontSize: 15,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 32,
+        paddingHorizontal: 20,
+    },
+    lockedFeatures: {
+        width: '100%',
+        gap: 16,
+        marginBottom: 32,
+    },
+    lockedFeatureRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 20,
+    },
+    lockedFeatureText: {
+        fontSize: 15,
+        fontWeight: '500',
+    },
+    unlockButton: {
+        width: '100%',
+        height: 52,
+        borderRadius: 26,
+        overflow: 'hidden',
+        shadowColor: '#FFD700',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    unlockButtonGradient: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    unlockButtonText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#000',
     },
 });
 

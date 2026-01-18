@@ -12,12 +12,14 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Alert } from 'react-native';
 import { useGame } from '../context/GameContext';
 import { useTheme } from '../context/PreferencesContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { NotificationService } from '../services/NotificationService';
 import * as Notifications from 'expo-notifications';
 
 export const DebugMenu: React.FC = () => {
     const { debug } = useGame();
     const theme = useTheme();
+    const { isPro, togglePro } = useSubscription();
     const [visible, setVisible] = useState(false);
 
     // Only show in DEV mode
@@ -213,6 +215,19 @@ export const DebugMenu: React.FC = () => {
                             onPress={() => handleAction('Unlock All Badges', () => debug?.unlockAllBadges()!)}
                         >
                             <Text style={styles.btnText}>Unlock All Badges</Text>
+                        </TouchableOpacity>
+
+                        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>💎 Subscription</Text>
+                        <TouchableOpacity
+                            style={[styles.btn, { backgroundColor: isPro ? '#10B981' : '#F59E0B' }]}
+                            onPress={() => {
+                                togglePro();
+                                Alert.alert('Subscription Toggled', `isPro is now: ${!isPro}`);
+                            }}
+                        >
+                            <Text style={styles.btnText}>
+                                {isPro ? '✓ Premium Active (Tap to Disable)' : '○ Free User (Tap to Enable Pro)'}
+                            </Text>
                         </TouchableOpacity>
                     </ScrollView>
                 </View>
