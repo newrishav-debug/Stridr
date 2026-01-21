@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Stridr",
+    "slug": "Stridr",
+    "version": "1.0.0",
+    "scheme": "stridr",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.newrishav.stridr",
+      "infoPlist": {
+        "NSMotionUsageDescription": "Stridr uses your step count to track your progress on virtual trails.",
+        "NSPhotoLibraryUsageDescription": "Stridr needs access to your photos to let you update your profile picture.",
+        "NSCameraUsageDescription": "Stridr needs access to your camera to let you take a profile picture."
+      }
+    },
+    "android": {
+      "package": "com.newrishav.stridr",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      "expo-background-fetch",
+      "expo-mail-composer"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b18caa75-1d20-46b8-be53-dcc71eea5701"
+      }
+    }
+  }
+}
